@@ -1,6 +1,16 @@
 # 拷贝漫画 CopyReader
 
-一个供个人使用的 Android 第三方漫画阅读客户端，版本 1.7.0。显示名称为“拷贝漫画”，独立安装，不覆盖原版客户端。使用相同私有签名的个人安装包可覆盖更新；自行编译的签名由构建者管理。
+一个供个人使用的 Android 第三方漫画阅读客户端，版本 1.8.0。显示名称为“拷贝漫画”，独立安装，不覆盖原版客户端。使用相同私有签名的个人安装包可覆盖更新；自行编译的签名由构建者管理。
+
+## 1.8.0 弧形书架与交互
+
+- 用圆弧轨道增加书架纵深，按屏幕高度调整书册尺寸；加强纸页、书脊、接触阴影与深色纸面的层次。修复纸面渐变引用，分页控件避开悬浮导航。
+- 本地收藏、自选与阅读记录保留作品状态。书架优先显示“已完结”；旧收藏缺少状态时，在选书停稳后补读该作品详情，并缓存结果。状态未知时只显示历史更新时间，不据日期推断连载或完结。
+- 设置提供淡入淡出、轻盈滑动和关闭动画，以及快速、标准、舒缓三档速度；带可点击预览。增加封面淡入和轻量按压反馈，动画闲置时不运行循环。
+- 从右上角主题按钮圆形展开白天／暗夜主题，保留当前书架与已解码的封面。支持连续切换；系统减少动态效果、关闭动画或旧 WebView 不支持时直接切换。
+- 增加 Android 原生书架轻触反馈，按书脊切换触发并限频，遵循系统触感设置。可独立关闭，不新增权限。
+- 设置按阅读与外观、动画与触感、数据与备份、连接与高级设置折叠分组；记住收起状态，底部提供“关于该应用”。偏好和作品状态均进入本地备份。
+- 沿用原包名、私有签名和图标，可覆盖安装个人旧版；保留30本自选、惯性、账号、评论、阅读记录与章节定位。
 
 ## 1.7.0 投影、自选与30本书架
 
@@ -138,6 +148,7 @@ app/src/main/assets/design.css          1.6统一界面与书架比例
 tests/ui-smoke.cjs                        使用合成数据及真实浏览器触摸事件的界面测试
 tests/shelf-motion.cjs                    惯性减速、吸附和帧率无关的确定性测试
 tests/shelf-materials.cjs                 投影光向、升起与平移的几何检查
+tests/polish.cjs                          圆弧、状态、扩散半径和触感限频检查
 app/src/main/assets/shelf-materials.js     逐册投影、缓存遮挡与纸面明暗
 app/src/main/assets/shelf-editor.js        自选书架草稿、搜索与触摸排序
 app/src/main/assets/studio.css             投影层和编辑器样式
@@ -166,7 +177,7 @@ export ANDROID_SDK_ROOT=/你的/Android/Sdk
 bash build.sh
 ```
 
-输出为 `dist/CopyReader-1.7.0.apk`。流程为 Java 编译、aapt2 资源打包、D8、zipalign、apksigner。若没有 javac，脚本会从 Maven Central 下载 Eclipse ECJ 3.38.0 编译器作为开发工具。ECJ 不包含在源码压缩包中。
+输出为 `dist/CopyReader-1.8.0.apk`。流程为 Java 编译、aapt2 资源打包、D8、zipalign、apksigner。若没有 javac，脚本会从 Maven Central 下载 Eclipse ECJ 3.38.0 编译器作为开发工具。ECJ 不包含在源码压缩包中。
 
 ## 界面测试
 
@@ -180,7 +191,7 @@ CHROME_PATH=/你的/chrome路径 node tests/ui-smoke.cjs
 
 Java 协议测试只需 JDK 和 JSON-java 20240303。将该工具依赖放到 `tools/json.jar` 后，编译 `AccountProtocol.java` 与 `tests/AccountProtocolTest.java`，运行 `app.copyreader.clean.AccountProtocolTest`。该测试使用内存 HTTP 连接，校验编码、认证请求头、重定向拒绝和错误处理，不使用真实账号。
 
-评论协议检查需同时编译`CommentProtocol.java`与`tests/CommentProtocolTest.java`，运行`app.copyreader.clean.CommentProtocolTest`。目前123项界面检查、110组确定性运动检查、21组投影几何检查、12项账号协议检查与12项评论协议和13项本地PNG加载检查均通过。
+评论协议检查需同时编译`CommentProtocol.java`与`tests/CommentProtocolTest.java`，运行`app.copyreader.clean.CommentProtocolTest`。目前135项界面检查、110组确定性运动检查、21组投影几何检查、12项账号协议检查与12项评论协议和13项本地PNG加载检查均通过。
 
 ## 接口参考
 
