@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
+import android.view.HapticFeedbackConstants;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
@@ -46,6 +47,7 @@ public final class MainActivity extends Activity {
     private File imageDir, apiDir;
     private volatile boolean reading, volume = true, destroyed;
     private volatile String exportText = "";
+    private long lastShelfHaptic;
     private FrameLayout root;
     private View statusBarFill, navigationBarFill;
 
@@ -300,6 +302,12 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(!dark&&!reader?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR|View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR:0);
     }
     public final class Bridge {
+        @JavascriptInterface public void haptic(){runOnUiThread(() -> {
+            long now=android.os.SystemClock.uptimeMillis();
+            if(destroyed||reading||!web.hasWindowFocus()||now-lastShelfHaptic<45)return;
+            lastShelfHaptic=now;
+            web.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        });}
         @JavascriptInterface public String readState(){return prefs.getString("state","{}");}
         @JavascriptInterface public boolean saveState(String state){if(state==null||state.length()>=3000000)return false;try{new JSONObject(state);prefs.edit().putString("state",state).apply();return true;}catch(Exception ignored){return false;}}
         @JavascriptInterface public String getApi(){return prefs.getString("api",DEFAULT_API);}
