@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'app.copyreader.clean'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.copyreader.clean'
+        minSdk 26
+        targetSdk 35
+        versionCode 12
+        versionName '1.7.0'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+    signingConfigs {
+        personal {
+            storeFile file('../signing/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.personal }
+        release { minifyEnabled false; signingConfig signingConfigs.personal }
+    }
+}
