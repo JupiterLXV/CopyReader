@@ -1,0 +1,18 @@
+build/
+dist/
+.gradle/
+local.properties
+tools/
+checks/
+
+# Local signing keys and developer secrets
+signing/
+*.keystore
+*.jks
+*.p12
+*.pem
+.env
+.env.*
+.idea/
+*.iml
+.DS_Store
