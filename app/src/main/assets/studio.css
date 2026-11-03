@@ -1,31 +1,32 @@
-/* A shared light model. Paper casts are cached once; the floor follows the pose. */
+/* CopyReader 1.8: Studio Lighting & FLIP Drag-and-Drop Shelf Editor */
 .paper-material-defs{position:absolute;left:0;top:0;pointer-events:none;overflow:hidden}
-.paper-ground-shadows{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;filter:blur(2.2px)}
-.paper-cast-shadow{position:absolute;left:-16px;top:-16px;width:calc(100% + 32px);height:calc(100% + 32px);max-width:none;z-index:0;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.paper-ground-shadows{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;filter:blur(22px);opacity:.78;transform-origin:50% 88%}
+.paper-cast-shadow{position:absolute;left:-16px;top:-16px;width:calc(100% + 32px);height:calc(100% + 32px);max-width:none;max-height:none;pointer-events:none}
 .paper-book-art{position:relative;z-index:1}.paper-spine-glaze,.paper-face-glaze{pointer-events:none;stroke:none}
-.paper-stop-dark{stop-color:#5a503c;stop-opacity:.11}.paper-stop-light{stop-color:#fffefa;stop-opacity:.34}.paper-stop-seam{stop-color:#5a503c;stop-opacity:.07}.paper-stop-glint{stop-color:#fff;stop-opacity:.35}
-.dark .paper-stop-dark{stop-color:#000;stop-opacity:.25}.dark .paper-stop-light{stop-color:#fff;stop-opacity:.075}.dark .paper-stop-seam{stop-color:#000;stop-opacity:.16}.dark .paper-stop-glint{stop-color:#fff;stop-opacity:.08}
-.paper-poster-placeholder{stroke:#3e382515;stroke-width:.65}.dark .paper-poster-placeholder{stroke:#ffffff0e}
-.paper-top{stroke-width:.55}.paper-page-edge{opacity:.9}.paper-bind-mark{opacity:.85}
-.shelf-sources .shelf-tabs{gap:14px}.shelf-sources .shelf-tabs .chip{padding-right:9px;padding-left:9px}.shelf-sources .shelf-tabs .chip:first-child{padding-left:0}
-.header-actions{gap:0}.header-actions svg{width:21px;height:21px}.header-actions [data-act="editShelf"] svg{width:20px;height:20px}
+.paper-stop-dark{stop-color:#5a503c;stop-opacity:.12}.paper-stop-light{stop-color:#fffefa;stop-opacity:.36}
+.dark .paper-stop-dark{stop-color:#000;stop-opacity:.28}.dark .paper-stop-light{stop-color:#fff;stop-opacity:.08}
+.paper-poster-placeholder{stroke:#3e382515;stroke-width:.65}.dark .paper-poster-placeholder{stroke:#ffffff12}
+.paper-top{stroke-width:.55}.paper-page-edge{opacity:.92}.paper-bind-mark{opacity:.85}
+.shelf-sources .shelf-tabs{gap:14px}.shelf-sources .shelf-tabs .chip{padding-right:9px;padding-left:9px}.shelf-sources .account-trigger{max-width:none}
+.header-actions{gap:4px}.header-actions svg{width:21px;height:21px}.header-actions [data-act="editShelf"] svg{width:19px;height:19px}
 
-/* Editing is a separate, reversible draft. Candidate positions stay stable. */
-.shelf-editor{padding-bottom:56px}.shelf-editor .backhead{margin-bottom:0;gap:10px}.shelf-editor .backhead strong{font-size:15px;white-space:nowrap}.editor-header-space{flex:1}.shelf-editor .backhead>.btn{min-height:38px;padding:8px 15px;font-size:12px}
-.editor-switch{position:sticky;top:64px;z-index:23;min-height:49px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--bg);border-bottom:1px solid var(--line)}.editor-switch .chips{border:0;gap:16px}.editor-switch .chip{padding:12px 2px;min-height:48px;font-size:13px}.editor-switch .chip.active{font-weight:650}
-#shelf-edit-count{font:11px/1.5 ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:1px;color:var(--muted);white-space:nowrap}
-.editor-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px}.editor-section-head p,.editor-pick-head p{font-size:11px;color:var(--muted);line-height:1.6}.editor-section-head .textbtn{font-size:11px;padding-right:0}
-.shelf-edit-rows{border-top:1px solid var(--line)}.shelf-edit-row{height:72px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);background:var(--bg);transition:transform .14s cubic-bezier(.2,.7,.2,1);position:relative}
-.reorder-handle{align-self:stretch;min-width:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0;touch-action:none;cursor:grab;color:var(--muted)}.reorder-handle:active{cursor:grabbing}.reorder-handle svg{width:16px;height:16px;stroke-width:3;stroke-linecap:round}.row-number{font:9px/1.2 ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:.7px}
-.edit-thumb{width:31px;flex-shrink:0;pointer-events:none}.edit-thumb .cover{border-radius:2px;box-shadow:none}.edit-thumb .cover-fallback svg{width:18px;height:18px}
-.edit-book-info{flex:1;min-width:0}.edit-book-info strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.45;font-size:12px;font-weight:550;letter-spacing:-.1px}.edit-book-info small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px;font-size:10px;line-height:1.4;color:var(--muted)}
-.shelf-edit-row>.iconbtn{width:44px;height:44px;color:var(--muted)}.shelf-edit-row>.iconbtn svg{width:18px;height:18px}.shelf-edit-row>.iconbtn:last-child{margin-left:-8px}
-.shelf-edit-row.is-dragged{opacity:.23}.shelf-drag-ghost{position:fixed;z-index:90;pointer-events:none;touch-action:none;margin:0;background:var(--card);border:1px solid var(--line);border-radius:6px;box-shadow:0 2px 4px #292f1910,0 12px 28px #292f1921;transform-origin:center;will-change:top,transform;opacity:1!important}.dark .shelf-drag-ghost{box-shadow:0 4px 28px #0006}
-.editor-sources{display:flex;gap:18px;padding-top:10px;border-bottom:1px solid var(--line);margin-bottom:17px}.editor-sources .chip{min-width:48px;padding:10px 3px;min-height:44px;font-size:12px}.editor-search{margin-bottom:8px}.editor-search input{font-size:13px}.editor-search button{display:flex;align-items:center;justify-content:center}
-.editor-pick-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:49px;margin-bottom:12px}.editor-pick-head .textbtn{font-size:11px;white-space:nowrap;padding-right:0}.editor-pick-head p{font-size:10px;max-width:180px}
-.candidate-grid{row-gap:24px}.candidate-card{position:relative}.candidate-card .cover{border:1px solid var(--line);box-shadow:0 2px 5px #20241509}.candidate-card.is-picked .cover{outline:2px solid var(--text);outline-offset:2px}
-.pick-badge{position:absolute;z-index:2;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:#fdfcf9e8;border:1px solid #6e736e55;color:#333;box-shadow:0 1px 5px #0001;display:flex;align-items:center;justify-content:center;font:10px/1 ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.pick-badge:empty:after{content:"";width:9px;height:9px;border:1px solid #878b7c;border-radius:50%}.candidate-card.is-picked .pick-badge{background:var(--text);color:var(--bg);border-color:var(--text)}
-.editor-error{font-size:12px;color:#a64739;line-height:1.7;padding-top:18px}.shelf-editor .empty{padding-top:48px}.shelf-editor .empty .btn{margin-top:18px}.shelf-editor>.loadmore svg,.shelf-edit-rows+.loadmore svg{width:16px;height:16px;margin-right:4px}
-@media(max-width:350px){.shelf-sources .shelf-tabs{gap:9px}.shelf-sources .shelf-tabs .chip{padding-right:7px;padding-left:7px}.header-actions .iconbtn{width:40px}.account-trigger{max-width:78px}.shelf-edit-row{gap:8px}.reorder-handle{min-width:28px}.edit-thumb{width:28px}.shelf-edit-row>.iconbtn{width:44px}.edit-book-info strong{font-size:11.5px}.editor-pick-head p{max-width:135px}.shelf-editor .backhead strong{font-size:14px}.shelf-editor .backhead>.btn{padding-left:12px;padding-right:12px}}
+.shelf-editor{padding-bottom:64px}.shelf-editor .backhead{margin-bottom:0;gap:10px}.shelf-editor .backhead strong{flex:1;min-width:0}
+.editor-switch{position:sticky;top:62px;z-index:23;min-height:49px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 var(--gutter);background:var(--toolbar);border-bottom:1px solid var(--line);backdrop-filter:blur(16px)}
+#shelf-edit-count{font:11px/1.5 ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.editor-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px}.editor-section-head h2{font-size:16px;font-weight:650}
+.shelf-edit-rows{border-top:1px solid var(--line)}
+.shelf-edit-row{height:74px;display:flex;align-items:center;gap:10px;padding:0 6px;border-bottom:1px solid var(--line);background:var(--card);transition:transform .22s cubic-bezier(.22,1,.36,1),background-color .15s ease,opacity .15s ease}
+.reorder-handle{align-self:stretch;min-width:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);cursor:grab;touch-action:none}
+.edit-thumb{width:33px;flex-shrink:0;pointer-events:none}.edit-thumb .cover{border-radius:4px;box-shadow:none}.edit-thumb .cover-fallback svg{width:16px;height:16px}
+.edit-book-info{flex:1;min-width:0}.edit-book-info strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;font-size:13.5px;font-weight:560}
+.shelf-edit-row>.iconbtn{width:44px;height:44px;color:var(--muted)}.shelf-edit-row>.iconbtn svg{width:18px;height:18px}
+.shelf-edit-row.is-dragged{opacity:.32;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px}
+.shelf-drag-ghost{position:fixed;z-index:90;pointer-events:none;touch-action:none;transform:translate3d(-50%,-50%,0);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.24);border:1px solid var(--accent)}
+.editor-sources{display:flex;gap:18px;padding-top:10px;border-bottom:1px solid var(--line);margin-bottom:17px}.editor-sources .chip{min-height:42px}
+.editor-pick-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:49px;margin-bottom:17px}
+.candidate-grid{row-gap:24px}.candidate-card{position:relative}.candidate-card .cover{border:1px solid var(--line)}
+.pick-badge{position:absolute;z-index:2;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)}
+.pick-badge:empty:after{content:"";width:9px;height:9px;border:1.5px solid #878b7c;border-radius:50%}.candidate-card.is-selected .pick-badge{background:var(--accent-brand);border-color:var(--accent-brand);color:#fff}
+.editor-error{font-size:12px;color:#a64739;line-height:1.7;padding-top:18px}.shelf-editor .empty{padding-top:48px}
+@media(max-width:350px){.shelf-sources .shelf-tabs{gap:9px}.shelf-sources .shelf-tabs .chip{padding-right:7px;padding-left:7px}}
 @media(prefers-reduced-motion:reduce){.shelf-edit-row{transition:none}.shelf-drag-ghost{will-change:auto}}
