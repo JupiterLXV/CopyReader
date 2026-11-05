@@ -66,3 +66,9 @@ Use case: precise-object-edit. Asset type: Android launcher icon. Edit the attac
 逐节阅读用户提供的《Flutter 页面转场与标题展开动画指南》，移除上版11种页面效果及其选择菜单，重新独立实现同级横向共享轴、卡片容器展开、遮罩标题与首屏错位入场。所有页面、标题和列表共同使用路由时钟；返回只做反向退场，不重播标题。阅读器使用短淡出淡入与统一纸页揭示；主题圆形扩散继续保留。
 
 没有新增图像、字体或Flutter依赖。装饰旧场景仅临时存在于封闭Shadow DOM，结束或中断即清理；正式界面仍使用原有图标、纸纹和数据源封面。详细实现与时长对应见 `MOTION_DESIGN.md`。
+
+## 1.12.0 档案式裁切与设置分层
+
+阅读用户提供的 `CopyReader-motion-migration.md`，并核对指定仓库 `ebcd7f1` 的 `archive_motion.dart`、`archive_design.dart`、`motion_ui.dart`。采用该文档描述的420／320ms节奏、斜切、不透明文字、编号与线条展开，以及4px面板和四角定位标记的交互方向。
+
+新增 `archive-motion.js` 为本项目独立编写的WebView关键帧配置，另由既有动效模块管理路由、控件交互和回收；没有复制Dart文件、Flutter渲染类、液态玻璃依赖、着色器或原项目素材。原有图标、纸纹、真实数据源封面及致谢保留。设置层级、返回和搜索仍由CopyReader原有状态管理，未迁移Flutter工程。测试截图及新迁移文档附件不进入APK。

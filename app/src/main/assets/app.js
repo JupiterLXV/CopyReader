@@ -40,7 +40,7 @@ function cleanBook(b){
  return {path_word:b.path_word,name:String(b.name||'未命名漫画').slice(0,240),cover,author,datetime_updated:String(b.datetime_updated||'').slice(0,20),status:BookMetadata.status(b.status),metadata_checked_at:Math.max(0,Math.min(Date.now(),Number(b.metadata_checked_at)||0))};
 }
 const SHELF_LIMIT=30;
-const defaults=()=>({version:1,favorites:Object.create(null),showcase:[],history:[],prefs:{theme:'system',mode:'vertical',volume:true,shelfLayout:'shelf',shelfSource:'local',motionStyle:'unified',motionVersion:4,motionSpeed:'standard',readerTurn:'paper',shelfHaptics:true,settingsOpen:['reading','motion']},searches:[]});
+const defaults=()=>({version:1,favorites:Object.create(null),showcase:[],history:[],prefs:{theme:'system',mode:'vertical',volume:true,shelfLayout:'shelf',shelfSource:'local',motionStyle:'unified',motionVersion:5,motionSpeed:'standard',readerTurn:'paper',shelfHaptics:true,settingsOpen:['reading','motion']},searches:[]});
 let state=defaults();
 function sanitize(raw){
  const n=defaults();
@@ -81,7 +81,8 @@ window.NativeNotice=toast;
 const systemDark=matchMedia('(prefers-color-scheme: dark)');
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 AppMotion.configure(()=>state.prefs);AppMotion.sync();
-let renderedView='',viewDirection=1,viewReturning=false,returnWord='',themeWanted=state.prefs.theme;
+let renderedView='',viewDirection=1,viewReturning=false,themeWanted=state.prefs.theme;
+let settingsSection='',settingsSearchValue='',settingsHomeScroll=0;
 let screen='main',tab='discover',route=0,mainScroll=0,detailScroll=0,exitAt=0;
 const tabScroll={discover:0,shelf:0,history:0,settings:0};
 let listing={mode:'latest',theme:'',query:'',items:[],total:0,loading:false,error:'',generation:0,loaded:false};
@@ -126,7 +127,7 @@ async function submitLogin(){
 }
 async function logout(){const epoch=++accountEpoch;try{await request('logout');if(epoch!==accountEpoch)return;account={ready:true,loggedIn:false,profile:null,host:'',error:''};resetCloud();chooseShelfSource('local');if(detail){detail.collect=0;detail.cloudReady=false;}render();toast('已退出账号，本地收藏已保留');}catch(e){toast(e.message);}}
 function dark(){return state.prefs.theme==='dark'||state.prefs.theme==='system'&&systemDark.matches;}
-function chrome(){AppMotion.sync();document.body.classList.toggle('dark',dark());document.body.classList.toggle('reader-open',screen==='reader');if(window.ReaderNative)ReaderNative.chrome(dark(),screen==='reader',state.prefs.volume);queueMicrotask(()=>{AppMotion.refresh(app.firstElementChild,renderedView);AppMotion.scheduleHeader();});}
+function chrome(){AppMotion.sync();document.body.classList.toggle('dark',dark());document.body.classList.toggle('reader-open',screen==='reader');if(window.ReaderNative)ReaderNative.chrome(dark(),screen==='reader',state.prefs.volume);queueMicrotask(()=>{AppMotion.refresh(app.firstElementChild,renderedView);});}
 systemDark.addEventListener?.('change',()=>{if(state.prefs.theme==='system')changeTheme('system');});
 function themeOrigin(element){const rect=(element||$('[data-act="quickTheme"]'))?.getBoundingClientRect();return {x:rect?rect.left+rect.width/2:innerWidth-34,y:rect?rect.top+rect.height/2:34};}
 function changeTheme(value,element){
@@ -158,20 +159,20 @@ function errorBox(message,retry){return `<div class="errorbox"><h3>加载失败<
 function nav(){return `<nav class="nav" aria-label="主导航"><div class="nav-inner">${[['discover','book','发现'],['shelf','shelf','书架'],['history','clock','历史'],['settings','settings','设置']].map(([id,i,label])=>`<button ${action('tab',attr('tab',id))} class="${tab===id?'active':''}" ${tab===id?'aria-current="page"':''}><span>${icon(i)}</span>${label}</button>`).join('')}</div></nav>`;}
 function render(){
  AppMotion.cancelTurn();
- const key=screen==='main'?'main:'+tab:screen+':'+(screen==='reader'?reader?.chapter:detail?.word||''),previous=renderedView,changed=previous!==key;
- if(changed)AppMotion.prepare(app.firstElementChild);renderedView=key;
+ const key=screen==='main'?'main:'+tab:screen+':'+(screen==='reader'?reader?.chapter:screen==='settings'?settingsSection:detail?.word||''),previous=renderedView,changed=previous!==key;
+ if(changed)AppMotion.prepare(app.firstElementChild,{parent:screen==='settings'});renderedView=key;
  if(screen!=='main'){disposeGallery();clearDeferredCovers();}chrome();
- if(screen==='shelfEdit')renderShelfEditor();else if(screen==='comments')renderComments();else if(screen==='reader')renderReader();else if(screen==='detail')renderDetail();else renderMain();
+ if(screen==='settings')renderSettingsDetail();else if(screen==='shelfEdit')renderShelfEditor();else if(screen==='comments')renderComments();else if(screen==='reader')renderReader();else if(screen==='detail')renderDetail();else renderMain();
  if(changed){
-  const word=returnWord,kind=word?'container-return':screen==='reader'?'reader':screen==='detail'&&!viewReturning?'container':screen==='main'&&previous.startsWith('main:')?'axis':'vertical';
-  AppMotion.enter(app.firstElementChild,{key,kind,direction:viewDirection,returning:viewReturning,returnTo:word?()=>$(`.paper-book.is-current[data-word="${word}"] .paper-poster`)||$(`.bookcard[data-word="${word}"] .cover img`):null});
+  const kind=screen==='main'&&previous.startsWith('main:')?'plane':screen==='reader'?'reader':'push';
+  AppMotion.enter(app.firstElementChild,{key,kind,direction:viewDirection,returning:viewReturning,keepParent:screen==='settings'&&!viewReturning});
  }
- viewDirection=1;viewReturning=false;returnWord='';
+ viewDirection=1;viewReturning=false;
 }
 function renderMain(){
  document.body.classList.remove('keyboard-editing');disposeGallery();clearDeferredCovers();
- const titles={discover:'拷贝漫画',shelf:'书架',history:'历史',settings:'设置'};
- app.innerHTML=`<div class="shell page-${tab}"><header class="topline"><h1>${titles[tab]}</h1><div class="header-actions">${tab==='shelf'?`<button class="iconbtn" ${action('tab',attr('tab','history'))} aria-label="阅读历史">${icon('clock')}</button><button class="iconbtn" ${action('shelfSearch')} aria-label="搜索漫画">${icon('search')}</button><button class="iconbtn" ${action('editShelf')} aria-label="整理自选书架">${icon('edit')}</button>`:''}<button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></div></header><div id="main-content">${tab==='discover'?discoverContent():tab==='shelf'?shelfContent():tab==='history'?historyContent():settingsContent()}</div></div>${nav()}`;bindPaperImages();mountGallery();bindDeferredCovers();
+ const titles={discover:'拷贝漫画',shelf:'书架',history:'历史',settings:'设置'},codes={discover:'01 / DISCOVER',shelf:'02 / COLLECTION',history:'03 / READING LOG',settings:'04 / SETTINGS'};
+ app.innerHTML=`<div class="shell page-${tab}"><header class="topline"><div class="archive-masthead"><h1>${titles[tab]}</h1><span class="archive-code" aria-hidden="true">${codes[tab]}</span></div><div class="header-actions">${tab==='shelf'?`<button class="iconbtn" ${action('tab',attr('tab','history'))} aria-label="阅读历史">${icon('clock')}</button><button class="iconbtn" ${action('shelfSearch')} aria-label="搜索漫画">${icon('search')}</button><button class="iconbtn" ${action('editShelf')} aria-label="整理自选书架">${icon('edit')}</button>`:''}<button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></div></header><div id="main-content">${tab==='discover'?discoverContent():tab==='shelf'?shelfContent():tab==='history'?historyContent():settingsContent()}</div></div>${nav()}`;bindPaperImages();mountGallery();bindDeferredCovers();if(tab==='settings'&&settingsSearchValue)filterSettings(settingsSearchValue);
 }
 function discoverContent(){
  const l=listing,h=state.history[0];
@@ -410,17 +411,23 @@ async function loadCloud(reset=false){
 }
 function historyContent(){return state.history.length?`<div class="sectionhead"><h2>阅读记录</h2><button class="textbtn" ${action('clearHistory')}>清空记录</button></div>${state.history.map(h=>`<div class="historyrow">${cover(h.book)}<button class="history-info" ${action('resume',attr('word',h.book.path_word))}><h3>${esc(h.book.name)}</h3><p>${esc(h.chapterName)} · ${h.page+1}/${h.total} 页</p><div class="progress"><span style="width:${Math.min(100,(h.page+1)/h.total*100)}%"></span></div></button><button class="iconbtn" ${action('removeHistory',attr('word',h.book.path_word))} aria-label="删除这条记录">${icon('close')}</button></div>`).join('')}`:empty('暂无阅读记录','','','clock');}
 function switchButton(on,act,label){return `<button class="switch ${on?'on':''}" ${action(act)} role="switch" aria-checked="${on}" aria-label="${label}"></button>`;}
-function settingsGroup(id,title,glyph,body){const notes={reading:'主题与阅读方式',motion:'页面转场与轻触反馈',data:'备份与图片缓存',network:'漫画与账号线路'};return `<details class="settings-group" id="settings-${id}" data-settings-group="${id}" ${state.prefs.settingsOpen.includes(id)?'open':''}><summary>${icon(glyph)}<span class="settings-group-heading">${title}<small>${notes[id]}</small></span><span class="settings-chevron">${icon('next')}</span></summary><div class="settings-group-body">${body}</div></details>`;}
+const settingsMeta={reading:{title:'阅读与外观',note:'主题、阅读方式与音量键',icon:'book',code:'SYSTEM / READING'},motion:{title:'动画与触感',note:'页面节奏、翻页与轻触反馈',icon:'sun',code:'SYSTEM / EFFECTS'},data:{title:'数据管理',note:'本地备份与图片缓存',icon:'shelf',code:'SYSTEM / STORAGE'},network:{title:'连接设置',note:'漫画与账号线路',icon:'wifi',code:'SYSTEM / CONNECTION'}};
+function settingsGroup(id,body){return `<section class="settings-group archive-panel" id="settings-${id}" data-settings-group="${id}"><div class="settings-group-body">${body}</div></section>`;}
 function settingsRow(title,note,act,value,on=null){return `<button class="settingrow settings-action" ${action(act)} ${on===null?'':`role="switch" aria-checked="${on}" aria-label="${esc(title)}"`}><span class="setting-copy"><strong>${title}</strong><span class="setting-description">${note}</span></span>${on===null?`<span class="setting-value">${esc(value)}</span>${icon('next')}`:`<span class="switch ${on?'on':''}" aria-hidden="true"></span>`}</button>`;}
-function settingsContent(){
+function settingsSections(){
  const theme={system:'跟随系统',light:'浅色',dark:'深色'}[state.prefs.theme];
  const reading=settingsRow('界面主题','浅色、深色或跟随系统','theme',theme)+settingsRow('默认阅读方式','点击切换，立即保存','readerMode',state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读')+settingsRow('音量键翻页','仅在阅读时生效','volume','',state.prefs.volume);
- const motion=settingsRow('页面动画','页面切换、标题与首屏内容统一呈现','toggleMotion','',state.prefs.motionStyle!=='none')+`<div class="motion-guide"><span>同级切换 · 卡片展开 · 标题揭示</span><button class="textbtn" ${action('previewMotion')}>预览</button><div class="motion-demo" id="motion-preview" aria-hidden="true"><span class="motion-demo-title">设置</span><i></i><i></i><i></i></div></div><label class="settingrow settings-select" for="motion-speed"><span class="setting-copy"><strong>动画节奏</strong><span class="setting-description">统一调整进场、返回与标题节奏</span></span><select id="motion-speed" ${state.prefs.motionStyle==='none'?'disabled':''}><option value="quick" ${state.prefs.motionSpeed==='quick'?'selected':''}>轻快</option><option value="standard" ${state.prefs.motionSpeed==='standard'?'selected':''}>标准</option><option value="calm" ${state.prefs.motionSpeed==='calm'?'selected':''}>舒展</option></select></label>`+settingsRow('逐页翻页动画','纸页展开，与页面共用缓动曲线','toggleReaderTurn','',state.prefs.readerTurn!=='none')+settingsRow('书架轻触反馈','滑过书脊时轻震，遵循系统设置','toggleShelfHaptics','',state.prefs.shelfHaptics)+`<p class="settings-hint" id="motion-hint">${reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':state.prefs.motionStyle==='none'?'页面、标题与翻页动画均已关闭。':'跟随系统的“减少动态效果”设置。'}</p>`;
+ const motion=settingsRow('页面动画','斜切换页，内容按同一时钟展开','toggleMotion','',state.prefs.motionStyle!=='none')+`<div class="motion-guide"><span>斜切换页 · 编号与内容展开</span><button class="textbtn" ${action('previewMotion')}>预览</button><div class="motion-demo" id="motion-preview" aria-hidden="true"><span class="motion-demo-title">设置</span><span class="archive-code" aria-hidden="true">04 / SETTINGS</span><i></i><i></i><i></i></div></div><label class="settingrow settings-select" for="motion-speed"><span class="setting-copy"><strong>动画节奏</strong><span class="setting-description">统一调整进场、返回与内容展开</span></span><select id="motion-speed" ${state.prefs.motionStyle==='none'?'disabled':''}><option value="quick" ${state.prefs.motionSpeed==='quick'?'selected':''}>轻快</option><option value="standard" ${state.prefs.motionSpeed==='standard'?'selected':''}>标准</option><option value="calm" ${state.prefs.motionSpeed==='calm'?'selected':''}>舒展</option></select></label>`+settingsRow('逐页翻页动画','纸页展开，与页面共用缓动曲线','toggleReaderTurn','',state.prefs.readerTurn!=='none')+settingsRow('书架轻触反馈','滑过书脊时轻震，遵循系统设置','toggleShelfHaptics','',state.prefs.shelfHaptics)+`<p class="settings-hint" id="motion-hint">${reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':state.prefs.motionStyle==='none'?'页面、标题与翻页动画均已关闭。':'跟随系统的“减少动态效果”设置。'}</p>`;
  const data=settingsRow('导出本地备份','书架、阅读记录和偏好','export','导出')+settingsRow('导入本地备份','合并书架与历史，恢复偏好','import','导入')+settingsRow('清理图片缓存','<span id="cache-size">上限约 120 MB</span>','clearCache','清理');
  const network=`<section class="panel"><div class="settings-field"><strong>账号登录线路</strong><p class="quiet">下次登录生效</p><label for="account-api-url" class="sr-only">HTTPS 账号接口域名</label><input id="account-api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getAccountApi():'https://api.copy202601.com')}"><select id="account-protocol" aria-label="账号登录协议"><option value="modern" ${!window.ReaderNative||ReaderNative.getAccountProtocol()==='modern'?'selected':''}>新版账号协议</option><option value="legacy" ${window.ReaderNative&&ReaderNative.getAccountProtocol()==='legacy'?'selected':''}>旧版兼容协议</option></select><div class="actions"><button class="btn small secondary" ${action('saveAccountApi')}>保存账号线路</button><button class="btn small outline" ${action('resetAccountApi')}>恢复新版默认</button></div><button class="textbtn rowgap" ${action('legacyAccountApi')}>使用旧版账号线路</button></div></section><section class="panel"><div class="settings-field"><strong>漫画数据线路</strong><p class="quiet">不影响已登录账号</p><label for="api-url" class="sr-only">HTTPS 数据接口域名</label><input id="api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getApi():'https://api.2024manga.com')}"><div class="actions"><button class="btn small secondary" ${action('saveApi')}>保存漫画线路</button><button class="btn small outline" ${action('testApi')}>测试漫画连接</button></div><button class="textbtn rowgap" ${action('resetApi')}>恢复默认漫画线路</button></div></section>`;
- return `${accountCard()}<div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" hidden>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-sections">${settingsGroup('reading','阅读与外观','book',reading)}${settingsGroup('motion','动画与触感','sun',motion)}${settingsGroup('data','数据管理','shelf',data)}${settingsGroup('network','连接设置','wifi',network)}</div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.11.0 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;
+ return {reading,motion,data,network};
 }
-function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.11.0</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
+function settingsContent(){return `${accountCard()}<div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off" value="${esc(settingsSearchValue)}"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" ${settingsSearchValue?'':'hidden'}>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-entries">${Object.entries(settingsMeta).map(([id,m])=>`<button class="feature-entry archive-panel" ${action('settingsPage',attr('value',id))} data-settings-target="${id}"><span class="feature-entry-content">${icon(m.icon)}<span><strong>${m.title}</strong><small>${m.note}</small></span>${icon('next')}</span></button>`).join('')}</div><div class="settings-search-results" hidden></div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.12.0 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;}
+function openSettingsSection(id){if(!settingsMeta[id]||screen!=='main'||tab!=='settings')return;settingsSearchValue=$('#settings-search')?.value||'';settingsHomeScroll=window.scrollY;document.activeElement?.blur();settingsSection=id;screen='settings';route++;viewReturning=false;viewDirection=1;render();window.scrollTo(0,0);}
+function renderSettingsDetail(){const id=settingsSection,m=settingsMeta[id];if(!m)return;app.innerHTML=`<div class="shell page-settings-sub" data-settings-section="${id}"><header class="settings-subhead"><button class="iconbtn" ${action('back')} aria-label="返回设置">${icon('arrow')}</button><div class="archive-route-title"><h1>${m.title}</h1><span class="archive-code" aria-hidden="true">${m.code}</span></div><button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></header><div id="main-content"><div class="archive-section" aria-hidden="true"><span class="archive-code">${m.code}</span><span class="archive-rule"></span><i></i></div>${settingsGroup(id,settingsSections()[id])}</div></div>`;AppMotion.bindBackGesture(app.firstElementChild,back);if(id==='data')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
+function closeSettingsSection(){if(screen!=='settings')return;const id=settingsSection;screen='main';tab='settings';settingsSection='';viewReturning=true;viewDirection=-1;route++;render();window.scrollTo(0,settingsHomeScroll);$(`[data-settings-target="${id}"]`)?.focus({preventScroll:true});}
+
+function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.12.0</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
 function findBook(word){return listing.items.find(b=>b.path_word===word)||cloud.items.find(b=>b.path_word===word)||state.favorites[word]||state.showcase.find(b=>b.path_word===word)||state.history.find(h=>h.book.path_word===word)?.book||detail?.book;}
 function historyFor(word){return state.history.find(h=>h.book.path_word===word);}
 async function openBook(word,options={}){
@@ -659,10 +666,11 @@ async function resume(word){const h=historyFor(word);if(!h)return;mainScroll=win
 function back(){
  if(modalRoot.children.length){dismissModal();return;}
  if(screen==='shelfEdit'){shelfEditor?.requestClose();return;}
+ if(screen==='settings'){closeSettingsSection();return;}
  viewDirection=-1;viewReturning=true;
  if(screen==='comments'){const d=discussion;discussion=null;route++;screen=d?.from==='reader'&&reader?'reader':detail?'detail':'main';render();window.scrollTo(0,d?.scroll||0);return;}
  if(screen==='reader'){const r=reader;r?.observer?.disconnect();persistReading();route++;screen=detail?'detail':'main';reader=null;render();window.scrollTo(0,detail?detailScroll:mainScroll);return;}
- if(screen==='detail'){returnWord=detail?.word||'';route++;screen='main';detail=null;render();window.scrollTo(0,mainScroll);return;}
+ if(screen==='detail'){route++;screen='main';detail=null;render();window.scrollTo(0,mainScroll);return;}
  if(tab!=='discover'){setTab('discover',true);return;}
  if(Date.now()-exitAt<1800){if(window.ReaderNative)ReaderNative.exit();return;}exitAt=Date.now();toast('再按一次返回键退出');
 }
@@ -679,7 +687,7 @@ function openCategories(){modal('题材',`<div class="chips" style="flex-wrap:wr
 function showTheme(){modal('界面主题',`<div class="theme-choices">${[['system','跟随系统'],['light','浅色'],['dark','深色']].map(([id,label])=>`<button class="theme-choice ${state.prefs.theme===id?'selected':''}" ${action('setTheme',attr('value',id))} aria-pressed="${state.prefs.theme===id}"><span class="theme-swatch ${id}" aria-hidden="true"></span>${label}</button>`).join('')}</div>`);}
 function toggleMode(){persistReading();if(!setPreference('mode',state.prefs.mode==='vertical'?'paged':'vertical'))return;if(screen==='reader'){AppMotion.cancelTurn();renderReader();}else{const value=$('[data-act="readerMode"] .setting-value');if(value)value.textContent=state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读';}}
 function readerMenu(){modal('阅读偏好',`<div class="settingrow"><strong>阅读方式</strong><button class="textbtn" ${action('modalMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'} ${icon('next')}</button></div><div class="settingrow"><strong>音量键翻页</strong>${switchButton(state.prefs.volume,'modalVolume','音量键翻页')}</div><p>逐页模式：左右滑动或点击两侧翻页。双指缩放可放大画面，点击中间收起工具栏。</p>`);}
-function setTab(value,returning=false){if(!['discover','shelf','history','settings'].includes(value))return;AppMotion.discard();viewReturning=returning;viewDirection=['discover','shelf','history','settings'].indexOf(value)>=['discover','shelf','history','settings'].indexOf(tab)?1:-1;if(shelfEditor){const editor=shelfEditor;shelfEditor=null;editor.destroy();}if(screen==='main')tabScroll[tab]=window.scrollY;if(reader){reader.observer?.disconnect();persistReading();reader=null;}route++;detail=null;discussion=null;screen='main';tab=value;closeModal();render();window.scrollTo(0,tabScroll[value]||0);if(value==='discover'&&!listing.loaded&&!listing.loading)loadList(true);if(value==='shelf'&&shelfTab==='cloud'&&account.loggedIn&&!cloud.loaded&&!cloud.loading)loadCloud();if(value==='settings')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
+function setTab(value,returning=false){if(!['discover','shelf','history','settings'].includes(value))return;settingsSection='';AppMotion.discard();viewReturning=returning;viewDirection=['discover','shelf','history','settings'].indexOf(value)>=['discover','shelf','history','settings'].indexOf(tab)?1:-1;if(shelfEditor){const editor=shelfEditor;shelfEditor=null;editor.destroy();}if(screen==='main')tabScroll[tab]=window.scrollY;if(reader){reader.observer?.disconnect();persistReading();reader=null;}route++;detail=null;discussion=null;screen='main';tab=value;closeModal();render();window.scrollTo(0,tabScroll[value]||0);if(value==='discover'&&!listing.loaded&&!listing.loading)loadList(true);if(value==='shelf'&&shelfTab==='cloud'&&account.loggedIn&&!cloud.loaded&&!cloud.loading)loadCloud();if(value==='settings')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
 function search(){const q=$('#search-input')?.value.trim()||'';listing.query=q;listing.theme='';if(q){state.searches=[q,...state.searches.filter(x=>x!==q)].slice(0,12);save();}document.activeElement?.blur();loadList(true);}
 window.onImported=raw=>{
  try{
@@ -694,17 +702,12 @@ window.onImported=raw=>{
  }catch(e){toast('备份文件格式不正确，未修改本地数据');}
 };
 function filterSettings(query){
- const q=query.trim().toLowerCase();let count=0;
- document.querySelectorAll('[data-settings-group]').forEach(group=>{
-  const rows=$$('.settingrow,.settings-field',group);let matches=0;
-  rows.forEach(row=>{const match=!q||row.textContent.toLowerCase().includes(q);row.hidden=!match;if(match)matches++;});
-  group.hidden=!!q&&!matches;
-  group.dataset.filtering=q?'1':'';
-  if(q)group.open=matches>0;else group.open=state.prefs.settingsOpen.includes(group.dataset.settingsGroup);
-  $('.motion-guide',group)?.toggleAttribute('hidden',!!q);count+=matches;
- });
- const status=$('#settings-search-status');if(status)status.textContent=q?`找到 ${count} 项相关设置`:'';
- $('#settings-no-results')?.toggleAttribute('hidden',!q||count>0);$('[data-act="clearSettingsSearch"]')?.toggleAttribute('hidden',!q);
+ const q=query.trim().toLowerCase();settingsSearchValue=query;const results=$('.settings-search-results');if(!results)return;
+ $('.settings-entries').hidden=!!q;results.hidden=!q;let count=0;
+ if(q){if(!results.children.length){const parts=settingsSections();results.innerHTML=Object.entries(settingsMeta).map(([id,m])=>`<div class="settings-search-group" data-settings-group="${id}"><h2>${m.title}</h2>${settingsGroup(id,parts[id])}</div>`).join('');}
+  for(const group of $$('.settings-search-group',results)){let matches=0;for(const row of $$('.settingrow,.settings-field',group)){const match=row.textContent.toLowerCase().includes(q);row.hidden=!match;if(match)matches++;}group.hidden=!matches;$('.motion-guide',group)?.toggleAttribute('hidden',true);count+=matches;}
+ }else results.innerHTML='';
+ $('#settings-search-status').textContent=q?`找到 ${count} 项相关设置`:'';$('#settings-no-results').hidden=!q||count>0;$('[data-act="clearSettingsSearch"]').hidden=!q;
 }
 function setPreference(key,value){const old=state.prefs[key];state.prefs[key]=value;if(!save()){state.prefs[key]=old;return false;}return true;}
 function syncMotionSettings(){
@@ -716,7 +719,6 @@ const editingField=element=>element?.matches?.('input:not([type=range]):not([typ
 document.addEventListener('focusin',e=>{if(editingField(e.target))document.body.classList.add('keyboard-editing');});
 document.addEventListener('focusout',()=>{queueMicrotask(()=>document.body.classList.toggle('keyboard-editing',!!editingField(document.activeElement)));});
 document.addEventListener('submit',e=>{if(screen==='shelfEdit'&&shelfEditor?.submit(e))return;if(e.target.id==='search-form'){e.preventDefault();search();}if(e.target.id==='login-form'){e.preventDefault();submitLogin();}if(e.target.id==='comment-form'){e.preventDefault();submitComment();}});
-document.addEventListener('toggle',e=>{const group=e.target;if(!group.matches?.('[data-settings-group]')||!group.isConnected||$('#settings-search')?.value.trim())return;const open=new Set(state.prefs.settingsOpen),id=group.dataset.settingsGroup;if(group.open)open.add(id);else open.delete(id);const next=['reading','motion','data','network'].filter(x=>open.has(x));if(JSON.stringify(next)!==JSON.stringify(state.prefs.settingsOpen)){state.prefs.settingsOpen=next;save();}},true);
 document.addEventListener('change',e=>{
  if(e.target.id==='motion-speed'){if(!setPreference('motionSpeed',['quick','standard','calm'].includes(e.target.value)?e.target.value:'standard'))e.target.value=state.prefs.motionSpeed;AppMotion.sync();AppMotion.preview($('#motion-preview'));}
  if(e.target.id==='show-password'&&$('#login-password'))$('#login-password').type=e.target.checked?'text':'password';
@@ -729,12 +731,10 @@ document.addEventListener('load',e=>{const el=e.target;if(el.matches?.('img[data
 document.addEventListener('click',async e=>{
  if(screen==='shelfEdit'&&shelfEditor&&(shelfEditor.menuClick(e)||shelfEditor.click(e)))return;
  if(e.detail!==0&&e.target.closest('.shelf-gallery')&&Date.now()<gallerySuppressUntil){e.preventDefault();return;}
- const summary=e.target.closest('.settings-group>summary');if(summary){e.preventDefault();AppMotion.disclosure(summary.parentElement);return;}
  if(e.target.matches('[data-dismiss]')){dismissModal();return;}
  const b=e.target.closest('[data-act]');if(!b||b.disabled)return;const a=b.dataset.act;
- if(a==='book'||a==='galleryBook'&&!Number(b.dataset.offset))AppMotion.capture(b.classList.contains('gallery-caption')?$('.paper-book.is-current'):b);
  switch(a){
- case 'accountSettings':if(loginBusy){toast('正在登录，请稍候');break;}closeModal();if(screen==='shelfEdit'&&shelfEditor){const editor=shelfEditor;editor.requestClose(()=>{finishShelfEditor(editor,false);setTab('settings');if($('#settings-network'))$('#settings-network').open=true;$('#account-api-url')?.scrollIntoView({block:'center'});});}else{setTab('settings');if($('#settings-network'))$('#settings-network').open=true;$('#account-api-url')?.scrollIntoView({block:'center'});}break;
+ case 'accountSettings':if(loginBusy){toast('正在登录，请稍候');break;}closeModal();if(screen==='shelfEdit'&&shelfEditor){const editor=shelfEditor;editor.requestClose(()=>{finishShelfEditor(editor,false);setTab('settings');openSettingsSection('network');$('#account-api-url')?.scrollIntoView({block:'center'});});}else{setTab('settings');openSettingsSection('network');$('#account-api-url')?.scrollIntoView({block:'center'});}break;
  case 'saveAccountApi':{const error=window.ReaderNative?ReaderNative.setAccountApi($('#account-api-url').value,$('#account-protocol').value):'请在 Android 应用中设置';toast(error||'账号线路已保存，下次登录使用新设置');}break;
  case 'resetAccountApi':if(window.ReaderNative){const error=ReaderNative.setAccountApi('https://api.copy202601.com','modern');if(error){toast(error);break;}$('#account-api-url').value=ReaderNative.getAccountApi();$('#account-protocol').value='modern';toast('已恢复新版账号线路，请重新登录');}break;
  case 'legacyAccountApi':if(window.ReaderNative){const error=ReaderNative.setAccountApi('https://api.2024manga.com','legacy');if(error){toast(error);break;}$('#account-api-url').value=ReaderNative.getAccountApi();$('#account-protocol').value='legacy';toast('已选择旧版账号线路，请重新登录');}break;
@@ -757,6 +757,7 @@ document.addEventListener('click',async e=>{
  case 'quickTheme':changeTheme((themeWanted==='dark'||themeWanted==='system'&&systemDark.matches)?'light':'dark',b);break;
  case 'theme':showTheme();break;
  case 'toggleShelfHaptics':state.prefs.shelfHaptics=!state.prefs.shelfHaptics;save();b.setAttribute('aria-checked',state.prefs.shelfHaptics);$('.switch',b)?.classList.toggle('on',state.prefs.shelfHaptics);break;
+ case 'settingsPage':openSettingsSection(b.dataset.value);break;
  case 'previewMotion':AppMotion.preview($('#motion-preview'));break;
  case 'toggleMotion':if(setPreference('motionStyle',state.prefs.motionStyle==='none'?'unified':'none')){AppMotion.stop();AppMotion.sync();syncMotionSettings();}break;
  case 'toggleReaderTurn':if(setPreference('readerTurn',state.prefs.readerTurn==='none'?'paper':'none')){const on=state.prefs.readerTurn!=='none';b.setAttribute('aria-checked',on);$('.switch',b)?.classList.toggle('on',on);AppMotion.cancelTurn();}break;
