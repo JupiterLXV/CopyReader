@@ -1,8 +1,18 @@
 /* Opaque planes and clipped foreground parts. The heading is always readable. */
+html,body{overflow-x:clip}
 .motion-outgoing{position:fixed;inset:0;z-index:30;pointer-events:none!important;overflow:hidden;background:var(--bg);contain:layout paint style}
-.motion-outgoing *{pointer-events:none!important;transition:none!important;animation:none!important}.motion-outgoing .topline,.motion-outgoing .backhead{visibility:hidden!important}
-[data-motion-scene="plane"] #main-content{position:relative;z-index:31;background:var(--bg)}
-[data-motion-scene="push"],[data-motion-scene="reader"],[data-swiping]{position:relative;z-index:31;background:var(--bg);min-height:100svh}
+.motion-outgoing *{pointer-events:none!important;transition:none!important;animation:none!important}
+#app{position:relative;min-height:100svh}
+#app-dock{position:fixed;inset:0;z-index:31;pointer-events:none;transform:translate3d(0,0,0)}
+#app-dock>.nav{pointer-events:auto}
+body.keyboard-editing #app-dock>.nav{pointer-events:none}
+#app[data-motion-scene]{z-index:31}
+#app[data-motion-scene="plane"]{background:none}
+#app[data-motion-scene="push"],#app[data-motion-scene="reader"],[data-swiping]{background:var(--bg);min-height:100svh}
+.motion-outgoing.motion-returning{z-index:32}
+.shell.page-main{padding-bottom:0;isolation:auto}
+.page-main>.topline{margin-bottom:0;background:var(--bg)}
+.page-main>#main-content{position:relative;min-height:calc(100svh - var(--main-header-height,86px));margin:0 calc(-1 * var(--gutter));padding:20px var(--gutter) 116px;background:var(--bg);display:flow-root}
 .motion-backdrop{z-index:0}.topline{z-index:42}.nav{z-index:60}
 .topline,.page-settings .topline{height:auto;min-height:86px;top:0;align-items:center;padding-top:12px;padding-bottom:12px}
 .archive-masthead{min-width:0;flex:1}.topline h1,.page-settings .topline h1{font-size:23px;line-height:1.18;font-weight:800;letter-spacing:-.7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

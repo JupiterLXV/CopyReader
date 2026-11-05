@@ -4,7 +4,9 @@
  const {curves,timing}=root.ArchiveMotion||(typeof require==='function'?require('./archive-motion.js'):{});
  const styles=Object.freeze({unified:'统一转场',none:'关闭动画'});
  let preferences=()=>({motionStyle:'unified',motionSpeed:'standard'}),scene=null,outgoing=null,turn=null,themeBusy=false,nextTheme=null,themeTransition=null,themeAnimation=null;
- const extras=new Set(),gates=new Set(),snapshotHeaders=new WeakMap(),snapshotThemes=new WeakMap();let snapshotStyles='',backdrop=null,swipe=null,sheetDrag=null,skipNextRoute=false;
+ const extras=new Set(),gates=new Set(),snapshotHeaders=new WeakMap(),snapshotThemes=new WeakMap();let snapshotStyles='',backdrop=null,swipe=null,sheetDrag=null,skipNextRoute=false,continuing=null,handoff=null;
+ const now=()=>root.document?.timeline.currentTime??performance.now();
+ const elapsed=session=>session.started===false?0:Number(session.clock?.currentTime??Math.max(0,now()-session.start));
  const reduced=()=>!root.document||root.document.hidden||root.matchMedia('(prefers-reduced-motion: reduce)').matches;
  const enabled=()=>!reduced()&&preferences().motionStyle!=='none';
  function profile(p=preferences()){return timing[p.motionSpeed]||timing.standard;}
@@ -19,35 +21,51 @@
   a.finished.catch(()=>{}).finally(()=>bucket.delete(a));return a;
  }
  function cancel(bucket){for(const a of bucket)a.cancel();bucket.clear();}
+ function routeAnimation(session,element,frames,options){
+  const a=animate(element,frames,options,session.animations);if(!a)return null;
+  // Start every plane and child on the same painted frame, including late data.
+  if(session.started&&session.clock?.playState==='paused'){a.pause();a.currentTime=elapsed(session);}else a.startTime=session.start;
+  return a;
+ }
  function release(gate){clearTimeout(gate.timer);gate.node.inert=gate.inert;if(gate.aria===null)gate.node.removeAttribute('aria-hidden');else gate.node.setAttribute('aria-hidden',gate.aria);gates.delete(gate);}
- function gate(node,delay,session){if(!node)return;const item={node,inert:node.inert,aria:node.getAttribute('aria-hidden'),timer:0,session};node.inert=true;node.setAttribute('aria-hidden','true');gates.add(item);item.timer=setTimeout(()=>release(item),Math.max(0,delay));}
- function clearScene(){if(!scene)return;const old=scene;scene=null;clearTimeout(old.timer);cancel(old.animations);for(const g of [...gates])if(g.session===old)release(g);if(old.element)delete old.element.dataset.motionScene;if(old.keepParent&&old.ghost){backdrop?.remove();backdrop=old.ghost;backdrop.remove();}else old.ghost?.remove();}
+ function gate(node,delay,session){if(!node)return;const item={node,inert:node.inert,aria:node.getAttribute('aria-hidden'),timer:0,delay,session};node.inert=true;node.setAttribute('aria-hidden','true');gates.add(item);if(session.started!==false)item.timer=setTimeout(()=>release(item),Math.max(0,delay));}
+ function clearScene(){if(!scene)return;const old=scene;scene=null;cancelAnimationFrame(old.frame);cancelAnimationFrame(old.geometryFrame);cancel(old.animations);for(const g of [...gates])if(g.session===old)release(g);if(old.element){delete old.element.dataset.motionScene;delete old.element.dataset.motionReturning;}if(old.keepParent&&old.ghost){backdrop?.remove();backdrop=old.ghost;backdrop.remove();}else old.ghost?.remove();}
  function finishRoute(){clearScene();outgoing?.remove();outgoing=null;}
  function discard(){backdrop?.remove();backdrop=null;}
  function prepare(element,options={}){
-  swipe?.clean();clearScene();outgoing?.remove();outgoing=null;
-  if((!enabled()&&!options.parent)||themeBusy||skipNextRoute||!element?.isConnected)return;
-  const rect=element.getBoundingClientRect(),clone=element.cloneNode(true),doc=root.document;
-  const wrapper=doc.createElement('div');wrapper.className='motion-outgoing';wrapper.inert=true;wrapper.setAttribute('aria-hidden','true');
+  swipe?.clean();continuing=null;handoff=null;
+  // A second tab tap changes the destination, not the running plane's clock.
+  if(scene?.kind==='plane'&&options.kind==='plane'&&!options.returning){continuing=scene;return;}
+  if(scene&&!scene.returning&&options.returning&&scene.ghost){handoff={incoming:root.getComputedStyle(scene.ghost).transform};}
+  outgoing?.remove();outgoing=null;
+  if((!enabled()&&!options.parent)||themeBusy||skipNextRoute||!element?.isConnected){clearScene();return;}
+  const rect=element.getBoundingClientRect(),clone=element.cloneNode(true),doc=root.document,dock=doc.getElementById('app-dock'),oldDock=dock?.childElementCount?dock.cloneNode(true):null;
+  const wrapper=doc.createElement('div');wrapper.className='motion-outgoing';wrapper.inert=true;wrapper.setAttribute('aria-hidden','true');wrapper.style.width=doc.documentElement.clientWidth+'px';
+  if(handoff){wrapper.style.background='transparent';clone.style.background=root.getComputedStyle(element).backgroundColor;}
   const inner=doc.createElement('div');Object.assign(inner.style,{position:'absolute',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px'});
   const originals=[element,...element.querySelectorAll('*')],copies=[clone,...clone.querySelectorAll('*')];
-  originals.forEach((node,i)=>{const copy=copies[i];if(!copy)return;if(node.tagName==='CANVAS'){try{copy.getContext('2d')?.drawImage(node,0,0);}catch(_){}}copy.scrollTop=node.scrollTop;copy.scrollLeft=node.scrollLeft;copy.removeAttribute('id');copy.removeAttribute('data-act');copy.removeAttribute('data-reader-image');copy.removeAttribute('data-cover');});
+  const copyOf=new Map(originals.map((node,i)=>[node,copies[i]]));
+  // Shadow DOM isolates IDs. Keep SVG gradient/filter references and #id styles.
+  originals.forEach((node,i)=>{const copy=copies[i];if(!copy)return;if(node.tagName==='CANVAS'){try{copy.getContext('2d')?.drawImage(node,0,0);}catch(_){}}copy.scrollTop=node.scrollTop;copy.scrollLeft=node.scrollLeft;copy.removeAttribute('data-act');copy.removeAttribute('data-reader-image');copy.removeAttribute('data-cover');});
+  for(const a of element.getAnimations({subtree:true})){const node=a.effect?.target,copy=copyOf.get(node);if(!copy||node===element)continue;const style=root.getComputedStyle(node);copy.style.transform=style.transform;copy.style.clipPath=style.clipPath;}
+  clearScene();delete clone.dataset.motionScene;delete clone.dataset.motionReturning;
   // Sticky chrome belongs to the new live route, never to the decorative old scene.
-  snapshotHeaders.set(wrapper,[...clone.querySelectorAll('.topline,.backhead')]);
-  clone.style.margin='0';clone.style.width='100%';clone.style.maxWidth='none';inner.appendChild(clone);if(options.parent&&element.nextElementSibling?.matches('.nav')){const nav=element.nextElementSibling.cloneNode(true);nav.querySelectorAll('[data-act],[id]').forEach(n=>{n.removeAttribute('data-act');n.removeAttribute('id');});inner.appendChild(nav);}
+  snapshotHeaders.set(wrapper,[...clone.querySelectorAll('.topline,.backhead'),oldDock].filter(Boolean));
+  clone.style.margin='0';clone.style.width='100%';clone.style.maxWidth='none';inner.appendChild(clone);
   if(!snapshotStyles)snapshotStyles=Array.from(doc.styleSheets).map(sheet=>{try{return Array.from(sheet.cssRules).map(rule=>rule.cssText).join('\n');}catch(_){return '';}}).join('\n');
-  const shadow=wrapper.attachShadow({mode:'closed'}),style=doc.createElement('style'),theme=doc.createElement('div');style.textContent=snapshotStyles+'\n*{animation:none!important;transition:none!important;pointer-events:none!important}';theme.className=doc.body.className;theme.appendChild(inner);shadow.append(style,theme);snapshotThemes.set(wrapper,theme);if(options.parent&&!enabled()){backdrop?.remove();backdrop=wrapper;return;}doc.body.appendChild(wrapper);outgoing=wrapper;
+  const shadow=wrapper.attachShadow({mode:'closed'}),style=doc.createElement('style'),theme=doc.createElement('div');style.textContent=snapshotStyles+'\n*{animation:none!important;transition:none!important;pointer-events:none!important}';theme.className=doc.body.className;theme.appendChild(inner);if(oldDock)theme.appendChild(oldDock);shadow.append(style,theme);snapshotThemes.set(wrapper,theme);if(options.parent&&!enabled()){backdrop?.remove();backdrop=wrapper;return;}doc.body.appendChild(wrapper);outgoing=wrapper;
  }
  function part(node,session,role='row',index=0,axis='vertical',travel=[-8,-6]){
   if(!node||session.returning||!enabled())return;
-  const [start,end]=root.ArchiveMotion.interval(role,index),elapsed=Math.max(0,performance.now()-session.start),delay=session.ms*start,duration=session.ms*(end-start);
-  animate(node,root.ArchiveMotion.part(axis,travel),{duration,delay,easing:curves.enter,fill:'backwards'},session.animations,elapsed);
-  const control=node.closest('button,label')||node;if(elapsed<delay+duration*.02)gate(control,delay+duration*.02-elapsed,session);
+  const [start,end]=root.ArchiveMotion.interval(role,index),at=elapsed(session),delay=session.ms*start,duration=session.ms*(end-start);
+  const options={duration,delay,easing:curves.enter,fill:'backwards'};
+  if(session.route)routeAnimation(session,node,root.ArchiveMotion.part(axis,travel),options);else animate(node,root.ArchiveMotion.part(axis,travel),options,session.animations,at);
+  const control=node.closest('button,label')||node;if(at<delay+duration*.02)gate(control,delay+duration*.02-at,session);
  }
  function title(element,session){
   if(!element||session.returning)return;
-  for(const node of element.querySelectorAll('.archive-code'))part(node,session,'code',0,'horizontal',[0,0]);
-  for(const node of element.querySelectorAll('.archive-rule'))part(node,session,'rule',0,'horizontal',[0,0]);
+  for(const node of element.querySelectorAll('.archive-code'))if(!node.dataset.motionTitle){node.dataset.motionTitle='1';part(node,session,'code',0,'horizontal',[0,0]);}
+  for(const node of element.querySelectorAll('.archive-rule'))if(!node.dataset.motionTitle){node.dataset.motionTitle='1';part(node,session,'rule',0,'horizontal',[0,0]);}
  }
  function firstScreen(element,session){
   if(session.returning)return;let rank=0;
@@ -59,30 +77,35 @@
  }
  function bind(element,session){
   if(!element||!enabled())return;session.element=element;element.dataset.motionScene=session.kind;
-  const elapsed=Math.max(0,performance.now()-session.start),direction=session.direction;
+  element.dataset.motionReturning=String(session.returning);const direction=session.direction;
   const target=session.kind==='plane'?(element.querySelector('#main-content')||element):element;
   let frames;
-  if(session.kind==='plane')frames=root.ArchiveMotion.plane(target.getBoundingClientRect().width,direction);
-  else if(session.returning)frames=[{transform:'translateX(-12%)'},{transform:'translateX(0)'}];
-  else frames=[{transform:'translateX(100%)'},{transform:'translateX(0)'}];
-  const clock=animate(target,frames,{duration:session.ms,easing:session.kind==='plane'?curves.plane:curves.enter},session.animations,elapsed);session.clock=clock;if(clock)clock.finished.then(()=>{if(scene===session&&session.clock===clock)clearScene();}).catch(()=>{});
+  if(session.kind==='plane')frames=planeFrames(target,direction);
+  else if(session.returning)frames=[{transform:session.incomingFrom||`translateX(${-session.width*.12}px)`},{transform:'translateX(0)'}];
+  else frames=[{transform:`translateX(${session.width}px)`},{transform:'translateX(0)'}];
+  const clock=routeAnimation(session,target,frames,{duration:session.ms,easing:session.kind==='plane'?curves.plane:curves.enter,fill:'both'});session.clock=clock;if(clock)clock.finished.then(()=>{if(scene===session&&session.clock===clock)clearScene();}).catch(()=>{});
   title(element,session);firstScreen(element,session);
  }
+ function planeFrames(target,direction){const r=target.getBoundingClientRect(),matrix=new DOMMatrixReadOnly(root.getComputedStyle(target).transform);return root.ArchiveMotion.plane(r.width,direction,{top:Math.max(0,matrix.m42-r.top),height:root.innerHeight});}
  function enter(element,options={}){
   if(typeof options==='number')options={direction:options};
   if(!enabled()||themeBusy||!element||skipNextRoute){skipNextRoute=false;outgoing?.remove();outgoing=null;if(!options.keepParent){backdrop?.remove();backdrop=null;}return;}
+  if(continuing&&scene===continuing){const current=continuing;continuing=null;current.key=options.key;title(element,current);firstScreen(element,current);cancelAnimationFrame(current.geometryFrame);current.geometryFrame=requestAnimationFrame(()=>{if(scene===current)current.clock?.effect.setKeyframes(planeFrames(current.clock.effect.target,current.direction));});return;}
   clearScene();const p=profile(),ms=options.returning?p.exit:options.kind==='reader'?p.reader:p.enter;
-  const current={key:options.key||'',kind:options.kind||'push',direction:options.direction||1,returning:!!options.returning,start:performance.now(),ms,animations:new Set(),ghost:outgoing,keepParent:!!options.keepParent,timer:0};
+  const current={key:options.key||'',kind:options.kind||'push',direction:options.direction||1,returning:!!options.returning,start:now(),started:false,route:true,ms,width:root.document.documentElement.clientWidth,animations:new Set(),ghost:outgoing,keepParent:!!options.keepParent,incomingFrom:handoff?.incoming,frame:0};handoff=null;
   outgoing=null;scene=current;
   if(!current.keepParent){backdrop?.remove();backdrop=null;}
-  if(current.ghost){for(const heading of snapshotHeaders.get(current.ghost)||[])heading.style.visibility=current.kind==='plane'?'hidden':'';const frames=current.returning?[{transform:'translateX(0)'},{transform:'translateX(100%)'}]:current.kind==='plane'?[{transform:'translate(0px,0px)'},{transform:`translate(${10*current.direction}px,-4px)`}]:[{transform:'translateX(0)'},{transform:'translateX(-12%)'}];animate(current.ghost,frames,{duration:ms,easing:current.kind==='plane'?curves.plane:curves.enter,fill:'forwards'},current.animations);}
+  if(current.ghost){current.ghost.classList.toggle('motion-returning',current.returning);for(const heading of snapshotHeaders.get(current.ghost)||[])heading.style.visibility=current.kind==='plane'?'hidden':'';const frames=current.returning?[{transform:'translateX(0)'},{transform:`translateX(${current.width}px)`}]:current.kind==='plane'?[{transform:'translate(0px,0px)'},{transform:`translate(${10*current.direction}px,-4px)`}]:[{transform:'translateX(0)'},{transform:`translateX(${-current.width*.12}px)`}];routeAnimation(current,current.ghost,frames,{duration:ms,easing:current.kind==='plane'?curves.plane:curves.enter,fill:'both'});}
   bind(element,current);
+  const dock=root.document.getElementById('app-dock');if(current.kind!=='plane'&&dock?.childElementCount)routeAnimation(current,dock,[{transform:current.returning?(current.incomingFrom||`translateX(${-current.width*.12}px)`):`translateX(${current.width}px)`},{transform:'translateX(0)'}],{duration:ms,easing:curves.enter,fill:'both'});
+  current.frame=requestAnimationFrame(()=>{if(scene!==current)return;current.frame=0;current.start=now();current.started=true;if(current.kind==='plane')current.clock?.effect.setKeyframes(planeFrames(current.clock.effect.target,current.direction));for(const a of current.animations)a.startTime=current.start;for(const g of gates)if(g.session===current)g.timer=setTimeout(()=>release(g),Math.max(0,g.delay));});
  }
  function refresh(element,key){
   const theme=snapshotThemes.get(backdrop);if(theme)theme.className=root.document.body.className;
-  const current=scene;if(!current||current.key!==key||!element||current.element===element||performance.now()-current.start>=current.ms)return;
-  for(const a of [...current.animations])if(a.effect?.target!==current.ghost){a.cancel();current.animations.delete(a);}
-  for(const g of [...gates])if(g.session===current)release(g);bind(element,current);
+  const current=scene;if(!current||current.key!==key||!element||elapsed(current)>=current.ms)return;
+  // Network results replace the contents, never the animated surface or clock.
+  for(const a of [...current.animations])if(!a.effect?.target?.isConnected){a.cancel();current.animations.delete(a);}
+  for(const g of [...gates])if(g.session===current&&!g.node.isConnected)release(g);title(element,current);firstScreen(element,current);
  }
  function preview(element){
   if(!element)return;cancel(extras);for(const g of [...gates])if(g.session?.preview)release(g);
