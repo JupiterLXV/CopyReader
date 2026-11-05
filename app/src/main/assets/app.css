@@ -180,4 +180,3 @@ html{scroll-padding-block:20px 110px}button{touch-action:manipulation}
 .reader-controls button{min-height:44px;font-size:12px}.reader-bottom input[type=range]{height:30px;margin-top:3px;touch-action:pan-x}
 .reader-scroll{scrollbar-gutter:stable}.reader-scroll.paged{scrollbar-gutter:auto}
 @media(max-width:350px){.gallery-caption{height:86px;min-height:86px}}
-@media(prefers-reduced-motion:no-preference){.modalshade{animation:shade-in .12s ease-out}.modal{animation:sheet-in .18s cubic-bezier(.2,.7,.2,1)}@keyframes shade-in{from{background-color:transparent}}@keyframes sheet-in{from{transform:translateY(14px);opacity:.7}}}

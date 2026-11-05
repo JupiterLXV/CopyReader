@@ -1,9 +1,8 @@
 const assert=require('node:assert/strict');
-const {outline,project}=require('../app/src/main/assets/shelf-materials.js');
+const {metrics,outline,project}=require('../app/src/main/assets/shelf-materials.js');
 let checks=0;
 for(const width of [280,345,520]){
- const face=Math.max(96,Math.min(128,width*.32)),spine=Math.max(14,Math.min(18,width*.043)),body=(face-20)*1.42+54;
- const m={width,face,spine,body,top:face*.3+4,front:spine+face*.66+3,height:body+face*.3+9};
+ const m=metrics(width+40,852),body=m.body;
  const shape=outline(m);assert.equal(shape.length,6);assert.ok(shape.every(p=>p.every(Number.isFinite)));assert.ok(Math.max(...shape.map(p=>p[0]))<m.front);checks++;
  let previousRay=0,previousAlpha=1;
  for(const fraction of [0,.1,.25,.5,.6]){

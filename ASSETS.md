@@ -44,3 +44,25 @@ Use case: precise-object-edit. Asset type: Android launcher icon. Edit the attac
 ## 1.8.0 圆弧、纸面与动效
 
 基于本仓库03a463f的实现继续优化。新增圆弧几何、轻量SVG纸纤维和恢复匹配的渐变定义，不引入新的栅格素材。保留现有图标、真实漫画封面与参考项目致谢。页面动画采用Web Animations，主题扩散在支持时使用Document View Transition；不支持或减少动态效果时直接应用状态。测试封面、测试截图和测试字体仍不打包。
+
+## 1.9.0 书装纸纹与转场参考
+
+- 资源：`app/src/main/assets/textures/book-linen.webp`（512×512，约43 KiB）。通过内置 GPT 图像生成工具生成方形纸装亚麻材质，再编码为 WebP；无外部版权素材、文字或封面内容。作为 SVG pattern 覆盖在代码生成的书脊和书面上，书籍封面仍由用户的数据源提供。
+- 素材提示词：
+
+> Use case: photorealistic-natural. Asset type: seamless material texture for the surface of premium cloth-bound manga volumes in an Android bookshelf UI. Create ONE square, edge-to-edge, perfectly flat orthographic material swatch: very fine warm ivory bookbinding linen blended with soft pressed paper fibers. Exquisite physical microtexture, restrained and natural, subtle short irregular fibers and microscopic woven tooth, clean premium Japanese art-book production. Uniform diffuse frontal lighting, almost uniform brightness across entire frame, no highlights or shading gradient. Texture must tile seamlessly on all four sides. It will be composited with live cover art and custom lighting in code, so NO books, no edges, no object, no perspective, no mockup, no collage, no letters, no logos, no text, no shadow, no visible grid, no large repeating motifs, no grunge. Very low contrast, warm off-white monochrome, high resolution crisp micro-detail.
+
+- 按本轮指定，阅读了 [mikufoxxx/Wenku8_Flutter](https://github.com/mikufoxxx/Wenku8_Flutter) 的 `lib/motion_ui.dart` 与 `lib/archive_motion.dart`。借鉴“封面沿自身平面起飞并落定、可中断的有限转场、列表分段揭示”的交互思想；未复制该项目 Flutter 代码、着色器或图片。这里的动画独立使用 Web Animations、SVG 仿射投影与原有页面状态实现。
+- 不把预渲染书籍图叠在真实封面上：页边、压线、光泽、遮挡及底面投影均由代码按实际尺寸生成，因此更换封面、主题和屏幕尺寸时仍能保持一致。
+
+## 1.10.0 交互与动效参考
+
+继续阅读了指定项目 `mikufoxxx/Wenku8_Flutter` 的 `motion_ui.dart`、`archive_motion.dart`、`archive_icon_motion.dart`、`reader_turn_motion.dart`、`reader_sheet_motion.dart`、`loading_handoff.dart`、`setting_menu.dart`、`my_page.dart`、`book_navigation.dart`。参考版本树 `ebcd7f1891b54a92fc045c372974d70ec829f10a`。关注有限动画时钟、互补裁切的纸页、内容就绪前保留旧画面、列表分段显现、整行设置点击与中断恢复。
+
+本轮未复制其Flutter代码、着色器或素材；WebView实现独立使用Web Animations、DOM与现有路由状态。新增11种模式中的书页、分栏、折光和聚焦各有独立关键帧。逐页翻动只保留至多一张装饰旧页，真实页、工具栏和阅读进度继续由原有阅读器管理。
+
+## 1.11.0 统一转场重写
+
+逐节阅读用户提供的《Flutter 页面转场与标题展开动画指南》，移除上版11种页面效果及其选择菜单，重新独立实现同级横向共享轴、卡片容器展开、遮罩标题与首屏错位入场。所有页面、标题和列表共同使用路由时钟；返回只做反向退场，不重播标题。阅读器使用短淡出淡入与统一纸页揭示；主题圆形扩散继续保留。
+
+没有新增图像、字体或Flutter依赖。装饰旧场景仅临时存在于封闭Shadow DOM，结束或中断即清理；正式界面仍使用原有图标、纸纹和数据源封面。详细实现与时长对应见 `MOTION_DESIGN.md`。

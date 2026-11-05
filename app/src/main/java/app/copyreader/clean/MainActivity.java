@@ -103,8 +103,8 @@ public final class MainActivity extends Activity {
                     if ("/image".equals(path)) return loadImage(u.getQueryParameter("url"));
                     if (path != null && path.startsWith("/assets/") && !path.contains("..")) {
                         String name=path.substring(8);
-                        String mime=name.endsWith(".css")?"text/css":name.endsWith(".js")?"application/javascript":name.endsWith(".svg")?"image/svg+xml":"text/html";
-                        return new WebResourceResponse(mime,"UTF-8",200,"OK",headers(),getAssets().open(name));
+                        String mime=name.endsWith(".css")?"text/css":name.endsWith(".js")?"application/javascript":name.endsWith(".svg")?"image/svg+xml":name.endsWith(".webp")?"image/webp":name.endsWith(".png")?"image/png":"text/html";
+                        return new WebResourceResponse(mime,mime.startsWith("image/")?null:"UTF-8",200,"OK",headers(),getAssets().open(name));
                     }
                 } catch(Exception e) { return empty(404); }
                 return empty(404);
@@ -256,7 +256,7 @@ public final class MainActivity extends Activity {
                 Object payload=original.opt("results");
                 if(!(payload instanceof JSONObject) || !((JSONObject)payload).has("chapter"))throw new IOException("当前章节数据格式暂不支持");
                 return original;
-            case "ping":JSONObject ping=api("/api/v3/comics?limit=1&offset=0&platform=3",true);if(ping.optBoolean("_stale"))throw new IOException("当前线路连接失败，正在保留之前的缓存");return ping;
+            case "ping":String candidate=safeHttps(a.optString("base",prefs.getString("api",DEFAULT_API)).trim());URL target=new URL(candidate);if((!target.getPath().isEmpty()&&!target.getPath().equals("/"))||target.getQuery()!=null||target.getRef()!=null)throw new IOException("只填写 HTTPS 域名，不含路径");JSONObject ping=fetchJson(candidate.replaceAll("/$","")+"/api/v3/comics?limit=1&offset=0&platform=3");if(ping.optInt("code",200)!=200||ping.optJSONObject("results")==null||ping.getJSONObject("results").optJSONArray("list")==null)throw new IOException("此地址未返回有效的漫画数据");return ping;
             case "cache":JSONObject c=new JSONObject();long bytes=0;File[] fs=imageDir.listFiles();if(fs!=null)for(File f:fs)bytes+=f.length();return c.put("bytes",bytes);
             case "clearCache":for(File dir:new File[]{imageDir,apiDir}){File[] files=dir.listFiles();if(files!=null)for(File f:files)f.delete();}return new JSONObject();
             default:throw new IOException("不支持的操作");

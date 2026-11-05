@@ -25,10 +25,16 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$SDK_ROOT" -name sdkmanager -type f 2>/devnull | head -n 1)
+            SDKMANAGER=$(find "$SDK_ROOT" -name sdkmanager -type f 2>/dev/null | head -n 1)
           fi
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Check shelf geometry and motion
+        run: |
+          node tests/shelf-motion.cjs
+          node tests/shelf-materials.cjs
+          node tests/polish.cjs
 
       - name: Build and Sign APK
         run: |

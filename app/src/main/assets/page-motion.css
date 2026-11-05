@@ -1,0 +1,18 @@
+/* Scene-based motion from the supplied guide; no user-selectable effect catalogue. */
+.motion-outgoing{position:fixed;inset:0;z-index:30;pointer-events:none!important;overflow:hidden;background:var(--bg);contain:layout paint style}
+.motion-outgoing *{pointer-events:none!important;transition:none!important;animation:none!important}
+.motion-outgoing .topline,.motion-outgoing .backhead{visibility:hidden!important}
+.motion-outgoing input,.motion-outgoing textarea{caret-color:transparent!important}
+.motion-title-mask{display:block;overflow:hidden;overflow:clip;padding-bottom:.06em;margin-bottom:-.06em}
+.motion-title-ink{display:block;transform:translateY(0)}
+.page-settings{--header-collapse:0}
+.page-settings .topline{height:118px;min-height:118px;top:-50px;align-items:flex-end;padding-bottom:15px;gap:14px}
+.page-settings .topline h1{font-size:calc(34px - 9px * var(--header-collapse));font-weight:750;line-height:1.15;letter-spacing:-.6px}
+.page-settings .topline .header-actions{align-self:flex-end;margin-bottom:-3px}
+.motion-guide{padding:17px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg-elevated)}
+.motion-guide>span{flex:1;font-size:11px;line-height:1.7;color:var(--muted)}.motion-guide>.textbtn{min-width:44px;min-height:44px;font-size:12px}
+.motion-demo{position:relative;width:100%;height:100px;border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:var(--card);overflow:hidden}
+.motion-demo-title{display:block;font-size:17px;font-weight:650;margin-bottom:9px;overflow:hidden}.motion-demo i{display:block;height:7px;background:var(--accent-soft);border-radius:3px;margin-top:6px}.motion-demo i:nth-of-type(2){width:80%}.motion-demo i:nth-of-type(3){width:60%}
+@media(max-width:350px){.page-settings .topline h1{font-size:calc(32px - 9px * var(--header-collapse))}.motion-guide{padding:14px 12px}.motion-guide>span{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.motion-outgoing{display:none!important}}
+.reader-image-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#b2b7ad;pointer-events:none;white-space:nowrap}.has-image>.reader-image-loading,.has-error>.reader-image-loading{display:none}

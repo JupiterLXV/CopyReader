@@ -9,7 +9,7 @@ const paths={
  clock:'M12 8v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
  settings:'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
  arrow:'M15 5l-7 7 7 7', next:'M9 5l7 7-7 7',
- refresh:'M20 7v5h-5M4 17v-5h5M20 11a8 8 0 0 0-14-5M4 13a8 8 0 0 0 14 5',
+ refresh:'M20.5 4v5h-5M20.2 9a8.5 8.5 0 1 0 .3 6',
  close:'M6 6l12 12M18 6L6 18', sun:'M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
  moon:'M20 14a8 8 0 1 1-10-10 6 6 0 0 0 10 10',
  heart:'M20 5c-3-3-6 0-8 2-2-2-5-5-8-2-4 4 1 9 8 15 7-6 12-11 8-15',
@@ -25,10 +25,13 @@ const paths={
  user:'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-2a8 8 0 0 1 16 0v2',
  edit:'M4 16L15 5l4 4L8 20H4zM13 7l4 4',check:'M5 12l4 4L20 5',plus:'M12 5v14M5 12h14',grip:'M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01',more:'M5 12h.01M12 12h.01M19 12h.01',up:'M5 15l7-7 7 7',down:'M5 9l7 7 7-7'
 };
-function icon(n){return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[n]||paths.book}"/></svg>`;}
+function icon(n){return `<svg viewBox="0 0 24 24" ${n==='refresh'?'class="icon-refresh"':''} aria-hidden="true"><path d="${paths[n]||paths.book}"/></svg>`;}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function attr(k,v){return `data-${k}="${esc(v)}"`;}
 function action(name,extra=''){return `data-act="${name}" ${extra}`;}
+function refreshButton(name,label,busy=false){return `<button type="button" class="refresh-control ${busy?'is-refreshing':''}" ${action(name)} data-refresh aria-label="${esc(label)}" title="${esc(label)}" aria-busy="${busy}" ${busy?'disabled':''}>${icon('refresh')}<span>${busy?'刷新中':'刷新'}</span></button>`;}
+function refreshBusy(name,busy){document.querySelectorAll(`[data-refresh][data-act="${name}"]`).forEach(button=>{button.disabled=busy;button.setAttribute('aria-busy',String(busy));button.classList.toggle('is-refreshing',busy);button.querySelector('span').textContent=busy?'刷新中':'刷新';});}
+
 function isWord(s){return typeof s==='string'&&/^[A-Za-z0-9_-]{1,200}$/.test(s);}
 function cleanBook(b){
  if(!b||!isWord(b.path_word))return null;
@@ -37,7 +40,7 @@ function cleanBook(b){
  return {path_word:b.path_word,name:String(b.name||'未命名漫画').slice(0,240),cover,author,datetime_updated:String(b.datetime_updated||'').slice(0,20),status:BookMetadata.status(b.status),metadata_checked_at:Math.max(0,Math.min(Date.now(),Number(b.metadata_checked_at)||0))};
 }
 const SHELF_LIMIT=30;
-const defaults=()=>({version:1,favorites:Object.create(null),showcase:[],history:[],prefs:{theme:'system',mode:'vertical',volume:true,shelfLayout:'shelf',shelfSource:'local',motionStyle:'fade',motionSpeed:'standard',themeRipple:true,shelfHaptics:true,settingsOpen:['reading','motion']},searches:[]});
+const defaults=()=>({version:1,favorites:Object.create(null),showcase:[],history:[],prefs:{theme:'system',mode:'vertical',volume:true,shelfLayout:'shelf',shelfSource:'local',motionStyle:'unified',motionVersion:4,motionSpeed:'standard',readerTurn:'paper',shelfHaptics:true,settingsOpen:['reading','motion']},searches:[]});
 let state=defaults();
 function sanitize(raw){
  const n=defaults();
@@ -47,9 +50,12 @@ function sanitize(raw){
  if(['system','light','dark'].includes(raw.prefs?.theme))n.prefs.theme=raw.prefs.theme;
  if(['vertical','paged'].includes(raw.prefs?.mode))n.prefs.mode=raw.prefs.mode;
  n.prefs.volume=raw.prefs?.volume!==false;
- if(['none','fade','slide'].includes(raw.prefs?.motionStyle))n.prefs.motionStyle=raw.prefs.motionStyle;
+ if(Object.hasOwn(AppMotion.styles,raw.prefs?.motionStyle))n.prefs.motionStyle=raw.prefs.motionStyle;
+ // Older effect names intentionally migrate to the unified scene-based system.
+ if(raw.prefs?.motionStyle==='none')n.prefs.motionStyle='none';
+ if(raw.prefs?.readerTurn==='none')n.prefs.readerTurn='none';
  if(['quick','standard','calm'].includes(raw.prefs?.motionSpeed))n.prefs.motionSpeed=raw.prefs.motionSpeed;
- n.prefs.themeRipple=raw.prefs?.themeRipple!==false;n.prefs.shelfHaptics=raw.prefs?.shelfHaptics!==false;
+ n.prefs.shelfHaptics=raw.prefs?.shelfHaptics!==false;
  if(Array.isArray(raw.prefs?.settingsOpen))n.prefs.settingsOpen=[...new Set(raw.prefs.settingsOpen.filter(x=>['reading','motion','data','network'].includes(x)))];
  if(['grid','shelf'].includes(raw.prefs?.shelfLayout))n.prefs.shelfLayout=raw.prefs.shelfLayout;
  if(['local','cloud','custom'].includes(raw.prefs?.shelfSource))n.prefs.shelfSource=raw.prefs.shelfSource;
@@ -75,7 +81,7 @@ window.NativeNotice=toast;
 const systemDark=matchMedia('(prefers-color-scheme: dark)');
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 AppMotion.configure(()=>state.prefs);AppMotion.sync();
-let renderedView='',viewDirection=1,themeWanted=state.prefs.theme;
+let renderedView='',viewDirection=1,viewReturning=false,returnWord='',themeWanted=state.prefs.theme;
 let screen='main',tab='discover',route=0,mainScroll=0,detailScroll=0,exitAt=0;
 const tabScroll={discover:0,shelf:0,history:0,settings:0};
 let listing={mode:'latest',theme:'',query:'',items:[],total:0,loading:false,error:'',generation:0,loaded:false};
@@ -120,7 +126,7 @@ async function submitLogin(){
 }
 async function logout(){const epoch=++accountEpoch;try{await request('logout');if(epoch!==accountEpoch)return;account={ready:true,loggedIn:false,profile:null,host:'',error:''};resetCloud();chooseShelfSource('local');if(detail){detail.collect=0;detail.cloudReady=false;}render();toast('已退出账号，本地收藏已保留');}catch(e){toast(e.message);}}
 function dark(){return state.prefs.theme==='dark'||state.prefs.theme==='system'&&systemDark.matches;}
-function chrome(){AppMotion.sync();document.body.classList.toggle('dark',dark());document.body.classList.toggle('reader-open',screen==='reader');if(window.ReaderNative)ReaderNative.chrome(dark(),screen==='reader',state.prefs.volume);}
+function chrome(){AppMotion.sync();document.body.classList.toggle('dark',dark());document.body.classList.toggle('reader-open',screen==='reader');if(window.ReaderNative)ReaderNative.chrome(dark(),screen==='reader',state.prefs.volume);queueMicrotask(()=>{AppMotion.refresh(app.firstElementChild,renderedView);AppMotion.scheduleHeader();});}
 systemDark.addEventListener?.('change',()=>{if(state.prefs.theme==='system')changeTheme('system');});
 function themeOrigin(element){const rect=(element||$('[data-act="quickTheme"]'))?.getBoundingClientRect();return {x:rect?rect.left+rect.width/2:innerWidth-34,y:rect?rect.top+rect.height/2:34};}
 function changeTheme(value,element){
@@ -151,21 +157,26 @@ function empty(title,desc,button='',name='book'){return `<div class="empty">${ic
 function errorBox(message,retry){return `<div class="errorbox"><h3>加载失败</h3><p>${esc(message)}</p><button class="btn small" ${action(retry)}>重试</button><button class="btn small outline" ${action('tab',attr('tab','settings'))}>网络设置</button></div>`;}
 function nav(){return `<nav class="nav" aria-label="主导航"><div class="nav-inner">${[['discover','book','发现'],['shelf','shelf','书架'],['history','clock','历史'],['settings','settings','设置']].map(([id,i,label])=>`<button ${action('tab',attr('tab',id))} class="${tab===id?'active':''}" ${tab===id?'aria-current="page"':''}><span>${icon(i)}</span>${label}</button>`).join('')}</div></nav>`;}
 function render(){
- const key=screen==='main'?'main:'+tab:screen+':'+(screen==='reader'?reader?.chapter:detail?.word||''),changed=!!renderedView&&renderedView!==key;renderedView=key;
+ AppMotion.cancelTurn();
+ const key=screen==='main'?'main:'+tab:screen+':'+(screen==='reader'?reader?.chapter:detail?.word||''),previous=renderedView,changed=previous!==key;
+ if(changed)AppMotion.prepare(app.firstElementChild);renderedView=key;
  if(screen!=='main'){disposeGallery();clearDeferredCovers();}chrome();
  if(screen==='shelfEdit')renderShelfEditor();else if(screen==='comments')renderComments();else if(screen==='reader')renderReader();else if(screen==='detail')renderDetail();else renderMain();
- if(changed)AppMotion.enter(screen==='main'?$('#main-content'):$('.reader')||$('.shell'),viewDirection);
- viewDirection=1;
+ if(changed){
+  const word=returnWord,kind=word?'container-return':screen==='reader'?'reader':screen==='detail'&&!viewReturning?'container':screen==='main'&&previous.startsWith('main:')?'axis':'vertical';
+  AppMotion.enter(app.firstElementChild,{key,kind,direction:viewDirection,returning:viewReturning,returnTo:word?()=>$(`.paper-book.is-current[data-word="${word}"] .paper-poster`)||$(`.bookcard[data-word="${word}"] .cover img`):null});
+ }
+ viewDirection=1;viewReturning=false;returnWord='';
 }
 function renderMain(){
- disposeGallery();clearDeferredCovers();
+ document.body.classList.remove('keyboard-editing');disposeGallery();clearDeferredCovers();
  const titles={discover:'拷贝漫画',shelf:'书架',history:'历史',settings:'设置'};
  app.innerHTML=`<div class="shell page-${tab}"><header class="topline"><h1>${titles[tab]}</h1><div class="header-actions">${tab==='shelf'?`<button class="iconbtn" ${action('tab',attr('tab','history'))} aria-label="阅读历史">${icon('clock')}</button><button class="iconbtn" ${action('shelfSearch')} aria-label="搜索漫画">${icon('search')}</button><button class="iconbtn" ${action('editShelf')} aria-label="整理自选书架">${icon('edit')}</button>`:''}<button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></div></header><div id="main-content">${tab==='discover'?discoverContent():tab==='shelf'?shelfContent():tab==='history'?historyContent():settingsContent()}</div></div>${nav()}`;bindPaperImages();mountGallery();bindDeferredCovers();
 }
 function discoverContent(){
  const l=listing,h=state.history[0];
  return `<form class="searchbar" id="search-form" role="search">${icon('search')}<input id="search-input" type="search" placeholder="搜索漫画" aria-label="搜索漫画" value="${esc(l.query)}" enterkeyhint="search" maxlength="120"><button type="button" ${action(l.query?'clearSearch':'search')} aria-label="${l.query?'清除搜索':'搜索'}">${icon(l.query?'close':'next')}</button></form>
- <div class="chips browse-tabs">${[['latest','最近更新'],['popular','热门']].map(([m,t])=>`<button class="chip ${!l.query&&l.mode===m?'active':''}" ${action('listMode',attr('mode',m))}>${t}</button>`).join('')}<button class="chip ${l.theme?'label':''}" ${action('categories')}>${icon('filter')} ${l.theme?categoryName(l.theme):'题材'}</button><button class="textbtn refresh-tab" ${action('refreshList')} aria-label="刷新漫画列表">${icon('refresh')}</button></div>
+ <div class="chips browse-tabs">${[['latest','最近更新'],['popular','热门']].map(([m,t])=>`<button class="chip ${!l.query&&l.mode===m?'active':''}" ${action('listMode',attr('mode',m))}>${t}</button>`).join('')}<button class="chip ${l.theme?'label':''}" ${action('categories')}>${icon('filter')} ${l.theme?categoryName(l.theme):'题材'}</button>${refreshButton('refreshList','刷新漫画列表',l.loading)}</div>
  ${!l.query&&!l.theme&&h?`<button class="continue" ${action('resumeDetail',attr('word',h.book.path_word))}>${cover(h.book)}<div class="info"><h3>${esc(h.book.name)}</h3><p>${esc(h.chapterName)} · ${h.page+1}/${h.total} 页</p></div><span class="resume-label">继续阅读 ${icon('next')}</span></button>`:''}
  <div id="book-list" class="browse-results" aria-label="${l.query?'搜索结果':l.theme?categoryName(l.theme):l.mode==='popular'?'热门':'最近更新'}">${listCards()}</div>`;
 }
@@ -181,9 +192,11 @@ function paintBrowseResults(){
  const list=$('#book-list');if(!list)return;
  const grid=$('.grid',list),cards=grid?$$('.bookcard',grid):[],tail=$('.browse-tail',list),items=listing.items;
  if(cards.length&&tail&&cards.every((node,i)=>node.dataset.word===items[i]?.path_word)){
+  cards.forEach(node=>node.dataset.arrived='1');
   if(cards.length<items.length)grid.insertAdjacentHTML('beforeend',items.slice(cards.length).map(b=>card(b)).join(''));
   tail.innerHTML=listTail();const count=$('.result-count',list);if(count)count.textContent=listing.total+' 个结果';
  }else list.innerHTML=listCards();
+ AppMotion.arrive(list);
 }
 async function loadList(reset=false,refresh=false){
  const l=listing;if(l.loading&&!reset)return;
@@ -197,7 +210,7 @@ async function loadList(reset=false,refresh=false){
   for(const b of r.list||[]){if(!isWord(b.path_word)||seen.has(b.path_word))continue;seen.add(b.path_word);l.items.push(b);}
   l.total=Math.max(l.items.length,Number(r.total)||0);l.loaded=true;
  }catch(e){if(generation===l.generation)l.error=e.message;}
- finally{if(generation===l.generation){l.loading=false;if(screen==='main'&&tab==='discover')paintBrowseResults();}}
+ finally{if(generation===l.generation){l.loading=false;if(screen==='main'&&tab==='discover'){paintBrowseResults();refreshBusy('refreshList',false);}}}
 }
 function shelfContent(){
  const books=sourceBooks();
@@ -218,7 +231,7 @@ function openShelfEditor(){
 }
 function renderShelfEditor(){if(shelfEditor){chrome();shelfEditor.render();}}
 function finishShelfEditor(editor,saved=false){
- if(shelfEditor!==editor)return;shelfEditor=null;editor.destroy();closeModal();screen='main';tab='shelf';route++;renderMain();window.scrollTo(0,saved?0:mainScroll);
+ if(shelfEditor!==editor)return;shelfEditor=null;editor.destroy();closeModal();screen='main';tab='shelf';route++;viewReturning=true;viewDirection=-1;render();window.scrollTo(0,saved?0:mainScroll);
 }
 function shelfAccountTrigger(){
  const name=account.loggedIn?account.profile?.nickname||account.profile?.username||'账号':account.error?'重新登录':'登录';
@@ -236,11 +249,12 @@ function paperMetrics(){return ShelfMaterials.metrics(innerWidth,innerHeight);}
 function bindPaperImages(root=document){root.querySelectorAll('.paper-poster').forEach(img=>{if(img.dataset.listening)return;img.dataset.listening='1';img.addEventListener('load',()=>img.classList.add('loaded'),{once:true});img.addEventListener('error',()=>img.classList.add('failed'),{once:true});});}
 function paperPose(distance,m){return ShelfMaterials.pose(distance,m);}
 function paperBook(b,index,m,near=true){
- const f=m.face,s=m.spine,h=m.body,t=m.top,posterW=f-20,posterH=posterW*1.42;
- const chars=Array.from(String(b.name||'')),title=chars.length>8?[...chars.slice(0,7),'…']:chars,titleTop=Math.max(36,(h-title.length*10.8)/2+8);
+ const f=m.face,s=m.spine,h=m.body,t=m.top,a=m.projection,k=m.slope,posterW=f-8,posterH=posterW*1.42;
+ const chars=Array.from(String(b.name||'')),title=chars.length>11?[...chars.slice(0,10),'…']:chars,titleTop=Math.max(31,(h-title.length*11.6)/2+8);
  const date=bookSpineStatus(b),code=String(index+1).padStart(2,'0');
  const shadow=ShelfMaterials.bookShadow(m,dark());
- return `${shadow?`<img class="paper-cast-shadow" src="${shadow}" alt="" aria-hidden="true" draggable="false">`:''}<svg class="paper-book-art" viewBox="0 0 ${m.front} ${m.height}" aria-hidden="true"><path class="paper-top" d="M0 ${t}L${f*.66} 4L${s+f*.66} 5.2L${s} ${t+1.2}Z"/><path class="paper-page-edge" d="M2 ${t-.6}L${f*.66+2} 4.6M5 ${t-.4}L${f*.66+5} 4.8"/><g transform="matrix(1 ${1.2/s} 0 1 0 ${t})"><rect class="paper-spine" x="0" y="0" width="${s}" height="${h}"/><rect class="paper-spine-glaze" x="0" y="0" width="${s}" height="${h}" fill="url(#paper-spine-light)"/><text class="paper-code" x="${s/2}" y="14" text-anchor="middle">${code}</text><text class="paper-spine-title" text-anchor="middle">${title.map((c,i)=>`<tspan x="${s/2}" y="${titleTop+i*10.8}">${esc(c)}</tspan>`).join('')}</text><circle class="paper-bind-mark" cx="${s/2}" cy="${h-11}" r="2"/></g><g transform="matrix(.66 -.30 0 1 ${s} ${t+1.2})"><rect class="paper-front" x="0" y="0" width="${f}" height="${h}"/><rect class="paper-fiber" x="0" y="0" width="${f}" height="${h}" fill="url(#paper-fiber)"/><rect class="paper-face-glaze" x="0" y="0" width="${f}" height="${h}" fill="url(#paper-face-light)"/><text class="paper-code" x="10" y="19">${String(index+1).padStart(3,'0')}</text><rect class="paper-poster-placeholder" x="10" y="29" width="${posterW}" height="${posterH}"/>${b.cover?`<image class="paper-poster" data-src="${esc(imgUrl(b.cover))}" ${near?`href="${esc(imgUrl(b.cover))}"`:''} x="10" y="29" width="${posterW}" height="${posterH}" preserveAspectRatio="xMidYMid slice" data-cover/>`:''}<text class="paper-date" x="10" y="${h-11}">${esc(date)}</text></g></svg>`;
+ const lines=[.2,.42,.65,.82].map(n=>`M${s*n+1} ${t+n*.9}L${f*a+s*n} ${4+n*.9}`).join('');
+ return `${shadow?`<img class="paper-cast-shadow" src="${shadow}" alt="" aria-hidden="true" draggable="false">`:''}<svg class="paper-book-art" viewBox="0 0 ${m.front} ${m.height}" aria-hidden="true"><path class="paper-top" d="M0 ${t}L${f*a} 4L${s+f*a} 5.2L${s} ${t+1.2}Z"/><path class="paper-page-edge" d="${lines}"/><g transform="matrix(1 ${1.2/s} 0 1 0 ${t})"><rect class="paper-spine" x="0" y="0" width="${s}" height="${h}" rx=".7"/><rect class="paper-linen" x="0" y="0" width="${s}" height="${h}" fill="url(#paper-linen)"/><rect class="paper-spine-glaze" x="0" y="0" width="${s}" height="${h}" fill="url(#paper-spine-light)"/><path class="paper-binding" d="M${s-1.8} 3V${h-3}M2 23H${s-2}"/><text class="paper-code" x="${s/2}" y="16" text-anchor="middle">${code}</text><text class="paper-spine-title" text-anchor="middle">${title.map((c,i)=>`<tspan x="${s/2}" y="${titleTop+i*11.6}">${esc(c)}</tspan>`).join('')}</text><circle class="paper-bind-mark" cx="${s/2}" cy="${h-10}" r="1.6"/></g><g class="paper-cover-plane" transform="matrix(${a} ${-k} 0 1 ${s} ${t+1.2})"><rect class="paper-front" x="0" y="0" width="${f}" height="${h}" rx="1"/><rect class="paper-linen" x="0" y="0" width="${f}" height="${h}" fill="url(#paper-linen)"/><rect class="paper-poster-placeholder" x="4" y="4" width="${posterW}" height="${posterH}" rx=".8"/>${b.cover?`<image class="paper-poster" data-src="${esc(imgUrl(b.cover))}" ${near?`href="${esc(imgUrl(b.cover))}"`:''} x="4" y="4" width="${posterW}" height="${posterH}" preserveAspectRatio="xMidYMid slice" data-cover/>`:''}<rect class="paper-face-glaze" x="0" y="0" width="${f}" height="${h}" fill="url(#paper-face-light)"/><path class="paper-cover-seam" d="M2 1V${h-1}M${f-1} 1V${h-1}"/><text class="paper-date" x="6" y="${h-6}">${esc(date)}</text><text class="paper-code paper-edition" x="${f-6}" y="${h-6}" text-anchor="end">${code}</text></g></svg>`;
 }
 function shelfMeta(book){return BookMetadata.caption(book,historyFor(book.path_word));}
 function bookSpineStatus(book){return BookMetadata.status(book.status)?.completed?'已完结':/^\d{4}-\d{2}-\d{2}/.test(book.datetime_updated||'')?book.datetime_updated.slice(5,10).replace('-','.') : '';}
@@ -316,7 +330,7 @@ function paintGallery(g){
  for(let i=0;i<g.nodes.length;i++){
   const node=g.nodes[i],slot=Number(node.dataset.slot),offset=slot-centre,p=paperPose(slot-g.position,g.m);
   node.style.transform=`translate3d(${p.x.toFixed(3)}px,${p.y.toFixed(3)}px,0)`;poses.push(p);const shadow=$('.paper-cast-shadow',node);if(shadow)shadow.style.opacity=(.48+p.weight*.48).toFixed(3);
-  if(changed||g.label===null)node.style.zIndex=i+1;
+  node.style.zIndex=String(1000-Math.round(Math.abs(slot-g.position)*20));
   if(g.label!==centre){node.dataset.offset=offset;node.classList.toggle('is-current',offset===0);node.tabIndex=offset===0?0:-1;node.setAttribute('aria-label',`${offset===0?'打开':'选中'} ${g.books[galleryBookIndex(slot,g.books.length)].name}`);if(offset===0)node.removeAttribute('aria-hidden');else node.setAttribute('aria-hidden','true');}
   if(Math.abs(slot-g.position)<=2.5){const image=$('.paper-poster',node);if(image&&!image.hasAttribute('href'))image.setAttribute('href',image.dataset.src);}
  }
@@ -385,40 +399,41 @@ function resizeGallery(){
 function cloudContent(){
  if(!account.ready)return '<div class="spinner" aria-label="正在读取账号"></div>';
  if(!account.loggedIn)return empty('未登录','登录后查看账号收藏。','','shelf');
- const c=cloud;return `<div class="sectionhead collection-head"><h2 id="shelf-count">${shelfCount(c.loaded?c.total:null,c.items.length)}</h2><div class="collection-tools">${layoutControl()}<button class="iconbtn" ${action('refreshCloud')} aria-label="刷新账号书架">${icon('refresh')}</button></div></div><div id="cloud-list">${cloudCards()}</div>`;
+ const c=cloud;return `<div class="sectionhead collection-head"><h2 id="shelf-count">${shelfCount(c.loaded?c.total:null,c.items.length)}</h2><div class="collection-tools">${layoutControl()}${refreshButton('refreshCloud','刷新账号书架',c.loading)}</div></div><div id="cloud-list">${cloudCards()}</div>`;
 }
 function cloudCards(){const c=cloud;if(c.loading&&!c.items.length)return skeleton();if(c.error&&!c.items.length)return errorBox(c.error,'refreshCloud');if(c.loaded&&!c.items.length&&c.offset>=c.total)return empty('暂无账号收藏','在作品详情页添加账号收藏。','','shelf');return `${collection(c.items,'cloud')}${c.error?errorBox(c.error,'moreCloud'):''}${c.offset<c.total?`<button class="loadmore" ${action('moreCloud')} ${c.loading?'disabled':''}>${c.loading?'正在加载…':'加载更多账号收藏'}</button>`:c.items.length?'<p class="statusline">已加载全部</p>':''}`;}
 async function loadCloud(reset=false){
  if(!account.loggedIn||cloud.loading&&!reset)return;if(reset)resetCloud();const c=cloud,epoch=accountEpoch;c.loading=true;c.error='';if(screen==='main'&&tab==='shelf'&&shelfTab==='cloud'){if(reset||!c.items.length)renderMain();else{const button=$('[data-act="moreCloud"]');if(button){button.disabled=true;button.textContent='正在加载…';}}}
  try{const r=(await request('cloudShelf',{offset:c.offset})).results||{};if(epoch!==accountEpoch||cloud!==c)return;const rows=Array.isArray(r.list)?r.list:[],seen=new Set(c.items.map(b=>b.path_word));for(const row of rows){if(row.b_folder)continue;const b=row.comic||row;if(!isWord(b.path_word)||seen.has(b.path_word))continue;seen.add(b.path_word);c.items.push({...b,_cloudId:Number(row.uuid)||0});}c.offset+=rows.length;c.total=Math.max(c.offset,Number(r.total)||0);if(!rows.length)c.total=c.offset;c.loaded=true;}
  catch(e){if(epoch===accountEpoch&&cloud===c)c.error=e.message;}
- finally{if(cloud===c){c.loading=false;const el=$('#cloud-list');if(el){disposeGallery();clearDeferredCovers();el.innerHTML=cloudCards();bindPaperImages(el);mountGallery();bindDeferredCovers(el);const count=$('#shelf-count');if(count)count.innerHTML=shelfCount(c.loaded?c.total:null,c.items.length);}if(screen==='shelfEdit')shelfEditor?.refresh();}}
+ finally{if(cloud===c){c.loading=false;refreshBusy('refreshCloud',false);const el=$('#cloud-list');if(el){disposeGallery();clearDeferredCovers();el.innerHTML=cloudCards();bindPaperImages(el);mountGallery();bindDeferredCovers(el);const count=$('#shelf-count');if(count)count.innerHTML=shelfCount(c.loaded?c.total:null,c.items.length);}if(screen==='shelfEdit')shelfEditor?.refresh();}}
 }
 function historyContent(){return state.history.length?`<div class="sectionhead"><h2>阅读记录</h2><button class="textbtn" ${action('clearHistory')}>清空记录</button></div>${state.history.map(h=>`<div class="historyrow">${cover(h.book)}<button class="history-info" ${action('resume',attr('word',h.book.path_word))}><h3>${esc(h.book.name)}</h3><p>${esc(h.chapterName)} · ${h.page+1}/${h.total} 页</p><div class="progress"><span style="width:${Math.min(100,(h.page+1)/h.total*100)}%"></span></div></button><button class="iconbtn" ${action('removeHistory',attr('word',h.book.path_word))} aria-label="删除这条记录">${icon('close')}</button></div>`).join('')}`:empty('暂无阅读记录','','','clock');}
 function switchButton(on,act,label){return `<button class="switch ${on?'on':''}" ${action(act)} role="switch" aria-checked="${on}" aria-label="${label}"></button>`;}
-function settingsGroup(id,title,glyph,body){return `<details class="settings-group" id="settings-${id}" data-settings-group="${id}" ${state.prefs.settingsOpen.includes(id)?'open':''}><summary>${icon(glyph)}<span>${title}</span><span class="settings-chevron">${icon('next')}</span></summary><div class="settings-group-body">${body}</div></details>`;}
+function settingsGroup(id,title,glyph,body){const notes={reading:'主题与阅读方式',motion:'页面转场与轻触反馈',data:'备份与图片缓存',network:'漫画与账号线路'};return `<details class="settings-group" id="settings-${id}" data-settings-group="${id}" ${state.prefs.settingsOpen.includes(id)?'open':''}><summary>${icon(glyph)}<span class="settings-group-heading">${title}<small>${notes[id]}</small></span><span class="settings-chevron">${icon('next')}</span></summary><div class="settings-group-body">${body}</div></details>`;}
 function settingsRow(title,note,act,value,on=null){return `<button class="settingrow settings-action" ${action(act)} ${on===null?'':`role="switch" aria-checked="${on}" aria-label="${esc(title)}"`}><span class="setting-copy"><strong>${title}</strong><span class="setting-description">${note}</span></span>${on===null?`<span class="setting-value">${esc(value)}</span>${icon('next')}`:`<span class="switch ${on?'on':''}" aria-hidden="true"></span>`}</button>`;}
 function settingsContent(){
  const theme={system:'跟随系统',light:'浅色',dark:'深色'}[state.prefs.theme];
- const reading=settingsRow('界面主题','白天、暗夜或跟随系统','theme',theme)+settingsRow('默认阅读方式','竖向滚动 / 逐页阅读','readerMode',state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读')+settingsRow('音量键翻页','仅在阅读时生效','volume','',state.prefs.volume);
- const motion=`<label class="settingrow settings-select" for="motion-style"><span class="setting-copy"><strong>页面过渡</strong><span class="setting-description">切换页面时的动画方式</span></span><select id="motion-style"><option value="fade" ${state.prefs.motionStyle==='fade'?'selected':''}>淡入淡出</option><option value="slide" ${state.prefs.motionStyle==='slide'?'selected':''}>轻盈滑动</option><option value="none" ${state.prefs.motionStyle==='none'?'selected':''}>关闭动画</option></select></label><label class="settingrow settings-select" for="motion-speed"><span class="setting-copy"><strong>动画速度</strong><span class="setting-description">页面过渡与主题扩散</span></span><select id="motion-speed" ${state.prefs.motionStyle==='none'?'disabled':''}><option value="quick" ${state.prefs.motionSpeed==='quick'?'selected':''}>快速</option><option value="standard" ${state.prefs.motionSpeed==='standard'?'selected':''}>标准</option><option value="calm" ${state.prefs.motionSpeed==='calm'?'selected':''}>舒缓</option></select></label>`+settingsRow('主题圆形扩散','从右上角主题按钮展开','toggleThemeRipple','',state.prefs.themeRipple)+settingsRow('书架轻触反馈','滑过书脊时轻震，遵循系统设置','toggleShelfHaptics','',state.prefs.shelfHaptics)+`<div class="motion-preview-row"><span class="motion-preview" id="motion-preview">${icon('book')}<span>页面过渡</span></span><button class="textbtn" ${action('previewMotion')}>预览</button></div><p class="settings-hint">${reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':'系统开启减少动态效果时，自动停用动画。'}</p>`;
+ const reading=settingsRow('界面主题','浅色、深色或跟随系统','theme',theme)+settingsRow('默认阅读方式','点击切换，立即保存','readerMode',state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读')+settingsRow('音量键翻页','仅在阅读时生效','volume','',state.prefs.volume);
+ const motion=settingsRow('页面动画','页面切换、标题与首屏内容统一呈现','toggleMotion','',state.prefs.motionStyle!=='none')+`<div class="motion-guide"><span>同级切换 · 卡片展开 · 标题揭示</span><button class="textbtn" ${action('previewMotion')}>预览</button><div class="motion-demo" id="motion-preview" aria-hidden="true"><span class="motion-demo-title">设置</span><i></i><i></i><i></i></div></div><label class="settingrow settings-select" for="motion-speed"><span class="setting-copy"><strong>动画节奏</strong><span class="setting-description">统一调整进场、返回与标题节奏</span></span><select id="motion-speed" ${state.prefs.motionStyle==='none'?'disabled':''}><option value="quick" ${state.prefs.motionSpeed==='quick'?'selected':''}>轻快</option><option value="standard" ${state.prefs.motionSpeed==='standard'?'selected':''}>标准</option><option value="calm" ${state.prefs.motionSpeed==='calm'?'selected':''}>舒展</option></select></label>`+settingsRow('逐页翻页动画','纸页展开，与页面共用缓动曲线','toggleReaderTurn','',state.prefs.readerTurn!=='none')+settingsRow('书架轻触反馈','滑过书脊时轻震，遵循系统设置','toggleShelfHaptics','',state.prefs.shelfHaptics)+`<p class="settings-hint" id="motion-hint">${reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':state.prefs.motionStyle==='none'?'页面、标题与翻页动画均已关闭。':'跟随系统的“减少动态效果”设置。'}</p>`;
  const data=settingsRow('导出本地备份','书架、阅读记录和偏好','export','导出')+settingsRow('导入本地备份','合并书架与历史，恢复偏好','import','导入')+settingsRow('清理图片缓存','<span id="cache-size">上限约 120 MB</span>','clearCache','清理');
  const network=`<section class="panel"><div class="settings-field"><strong>账号登录线路</strong><p class="quiet">下次登录生效</p><label for="account-api-url" class="sr-only">HTTPS 账号接口域名</label><input id="account-api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getAccountApi():'https://api.copy202601.com')}"><select id="account-protocol" aria-label="账号登录协议"><option value="modern" ${!window.ReaderNative||ReaderNative.getAccountProtocol()==='modern'?'selected':''}>新版账号协议</option><option value="legacy" ${window.ReaderNative&&ReaderNative.getAccountProtocol()==='legacy'?'selected':''}>旧版兼容协议</option></select><div class="actions"><button class="btn small secondary" ${action('saveAccountApi')}>保存账号线路</button><button class="btn small outline" ${action('resetAccountApi')}>恢复新版默认</button></div><button class="textbtn rowgap" ${action('legacyAccountApi')}>使用旧版账号线路</button></div></section><section class="panel"><div class="settings-field"><strong>漫画数据线路</strong><p class="quiet">不影响已登录账号</p><label for="api-url" class="sr-only">HTTPS 数据接口域名</label><input id="api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getApi():'https://api.2024manga.com')}"><div class="actions"><button class="btn small secondary" ${action('saveApi')}>保存漫画线路</button><button class="btn small outline" ${action('testApi')}>测试漫画连接</button></div><button class="textbtn rowgap" ${action('resetApi')}>恢复默认漫画线路</button></div></section>`;
- return `${accountCard()}<div class="settings-sections">${settingsGroup('reading','阅读与外观','book',reading)}${settingsGroup('motion','动画与触感','sun',motion)}${settingsGroup('data','数据与备份','shelf',data)}${settingsGroup('network','连接与高级设置','wifi',network)}</div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.8.0 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;
+ return `${accountCard()}<div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" hidden>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-sections">${settingsGroup('reading','阅读与外观','book',reading)}${settingsGroup('motion','动画与触感','sun',motion)}${settingsGroup('data','数据管理','shelf',data)}${settingsGroup('network','连接设置','wifi',network)}</div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.11.0 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;
 }
-function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.8.0</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
+function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.11.0</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
 function findBook(word){return listing.items.find(b=>b.path_word===word)||cloud.items.find(b=>b.path_word===word)||state.favorites[word]||state.showcase.find(b=>b.path_word===word)||state.history.find(h=>h.book.path_word===word)?.book||detail?.book;}
 function historyFor(word){return state.history.find(h=>h.book.path_word===word);}
 async function openBook(word,options={}){
+ viewDirection=1;viewReturning=false;
  if(!isWord(word))return;if(screen==='main'){mainScroll=window.scrollY;tabScroll[tab]=mainScroll;}if(reader){reader.observer?.disconnect();persistReading();reader=null;}closeModal();const id=++route;
  detail={word,book:cleanBook(options.book)||cleanBook(findBook(word))||{path_word:word,name:'正在加载…',cover:'',author:[]},loading:true,error:'',groups:{},group:'default',chapters:[],total:0,chapLoading:false,chapError:'',chapterToken:0,chapterPending:null,locateGeneration:0,locating:false,locateError:'',reverse:false,filter:'',collect:0,cloudReady:false,cloudBusy:false,cloudError:''};
  screen='detail';window.scrollTo(0,0);render();
- try{const res=await request('detail',{comic:word});if(route!==id||!detail||detail.word!==word)return;const r=res.results||{};if(!r.comic)throw Error('漫画详情为空');detail.book=r.comic;rememberBookMetadata(r.comic,true);detail.groups=r.groups||{};detail.locked=r.is_lock===true;detail.group=detail.groups.default?'default':Object.keys(detail.groups)[0]||'default';detail.loading=false;renderDetail();AppMotion.enter($('.detail-shell'));if(options.locate)locateReadingChapter(detail);else loadChapters();loadCloudStatus(detail);}
- catch(e){if(route!==id)return;detail.loading=false;detail.error=e.message;renderDetail();}
+ try{const res=await request('detail',{comic:word,refresh:!!options.refresh});if(route!==id||!detail||detail.word!==word)return;const r=res.results||{};if(!r.comic)throw Error('漫画详情为空');detail.book=r.comic;rememberBookMetadata(r.comic,true);detail.groups=r.groups||{};detail.locked=r.is_lock===true;detail.group=detail.groups.default?'default':Object.keys(detail.groups)[0]||'default';detail.loading=false;renderDetail();if(options.locate)locateReadingChapter(detail);else loadChapters();loadCloudStatus(detail);}
+ catch(e){if(route!==id)return;detail.loading=false;detail.error=e.message;AppMotion.discard();renderDetail();}
 }
 function renderDetail(){
  if(!detail)return;const d=detail,b=d.book,h=historyFor(d.word),fav=!!state.favorites[d.word];chrome();
- app.innerHTML=`<div class="shell detail-shell"><div class="backhead"><button class="iconbtn" ${action('back')} aria-label="返回">${icon('arrow')}</button><strong>作品详情</strong><span style="flex:1"></span><button class="iconbtn" ${action('reloadDetail')} aria-label="刷新漫画详情">${icon('refresh')}</button></div>
+ app.innerHTML=`<div class="shell detail-shell"><div class="backhead"><button class="iconbtn" ${action('back')} aria-label="返回">${icon('arrow')}</button><strong>作品详情</strong><span style="flex:1"></span>${refreshButton('reloadDetail','刷新漫画详情',d.loading)}</div>
  <section class="detail-intro"><div class="detail-cover">${cover(b)}</div><div class="detail-meta"><h1>${esc(b.name)}</h1><p>${esc((b.author||[]).map(x=>x.name).join(' / ')||'作者信息加载中')}</p><p>${esc(b.status?.display||'')}${b.region?.display?' · '+esc(b.region.display):''}</p><div class="tags">${(b.theme||[]).slice(0,6).map(t=>`<span class="tag">${esc(t.name)}</span>`).join('')}</div></div></section>
  ${d.error?errorBox(d.error,'reloadDetail'):d.loading?'<div class="spinner"></div>':`<div class="actions detail-actions"><button class="btn" ${action('startRead')} ${d.locked?'disabled':''}>${icon('play')}${h?'继续阅读':'开始阅读'}</button><button class="btn secondary" ${action('favorite')}>${fav?'本地已收藏':'本地收藏'}</button></div>${h?`<div class="reading-mark"><p>上次读到 ${esc(h.chapterName)} · 第 ${h.page+1} 页</p><button class="textbtn" ${action('locateReadingChapter')}>定位章节</button></div>`:''}${d.locked?'<p class="settingnote">数据源限制了这部作品的访问，当前客户端无法阅读。</p>':''}<p class="brief">${esc(b.brief||'暂无简介')}</p><button class="comment-entry" ${action('openComicComments')}>${icon('comment')}<span>作品评论</span>${icon('next')}</button><div class="sectionhead"><h2>章节目录 <small>${d.total||''}</small></h2><button class="textbtn" ${action('reverseChapters')}>${icon('sort')} ${d.reverse?'倒序':'正序'}</button></div><div class="detailtools"><select id="group-select" aria-label="选择分组">${Object.entries(d.groups).map(([key,g])=>`<option value="${esc(key)}" ${key===d.group?'selected':''}>${esc(g.name||key)} · ${Number(g.count)||0} 话</option>`).join('')||'<option value="default">默认分组</option>'}</select></div><input class="chapter-filter" id="chapter-filter" type="search" placeholder="查找已加载章节" value="${esc(d.filter)}" aria-label="筛选已加载章节"><p id="chapter-locate-status" class="chapter-locate-status" role="status">${esc(d.locating?'正在定位上次阅读的章节…':d.locateError)}</p><div id="chapter-list">${chapterCards()}</div>`}</div>`;
  if(!d.loading&&!d.error){const block=document.createElement('div');block.id='cloud-control';block.innerHTML=cloudControl(d);$('.detail-actions',app)?.appendChild(block);}
@@ -455,7 +470,7 @@ function loadChapters(reset=false){
  if(reset){d.chapterToken++;d.chapters=[];d.total=0;}const token=d.chapterToken,group=d.group;d.chapLoading=true;d.chapError='';if($('#chapter-list'))$('#chapter-list').innerHTML=chapterCards();
  d.chapterPending=(async()=>{try{const r=(await request('chapters',{comic:d.word,group,offset:d.chapters.length})).results||{};if(detail!==d||d.chapterToken!==token||d.group!==group)return;const seen=new Set(d.chapters.map(c=>c.uuid));for(const c of r.list||[])if(isWord(c.uuid)&&!seen.has(c.uuid)){seen.add(c.uuid);d.chapters.push(c);}d.total=Number(r.total)||d.chapters.length;}
  catch(e){if(detail===d&&d.chapterToken===token)d.chapError=e.message;}
- finally{if(detail===d&&d.chapterToken===token){d.chapLoading=false;if($('#chapter-list'))$('#chapter-list').innerHTML=chapterCards();paintChapterLocation(d);}}})();return d.chapterPending;
+ finally{if(detail===d&&d.chapterToken===token){d.chapLoading=false;if($('#chapter-list'))$('#chapter-list').innerHTML=chapterCards();AppMotion.arrive($('#chapter-list'));paintChapterLocation(d);}}})();return d.chapterPending;
 }
 function cancelChapterLocation(d){if(!d)return;d.locateGeneration++;d.locating=false;d.locateError='';paintChapterLocation(d);}
 function paintChapterLocation(d){
@@ -476,7 +491,7 @@ async function locateReadingChapter(d=detail){
 }
 function openReaderCatalog(){
  const r=reader;if(!r)return;persistReading();r.observer?.disconnect();reader=null;closeModal();route++;
- if(detail?.word===r.book.path_word&&!detail.loading&&!detail.error){screen='detail';renderDetail();locateReadingChapter(detail);}else openBook(r.book.path_word,{locate:true,book:r.book});
+ if(detail?.word===r.book.path_word&&!detail.loading&&!detail.error){screen='detail';viewReturning=true;viewDirection=-1;render();locateReadingChapter(detail);}else openBook(r.book.path_word,{locate:true,book:r.book});
 }
 async function startRead(){
  const d=detail;if(!d||d.locked)return;const h=historyFor(d.word);
@@ -510,7 +525,7 @@ function commentCards(){
 }
 function renderComments(){
  const d=discussion;if(!d)return;chrome();
- app.innerHTML=`<div class="shell comments-shell"><header class="backhead"><button class="iconbtn" ${action('back')} aria-label="返回">${icon('arrow')}</button><strong>评论</strong><span style="flex:1"></span><button class="iconbtn" ${action('refreshComments')} aria-label="刷新评论">${icon('refresh')}</button></header><div class="discussion-title"><h1>${esc(d.book.name)}</h1>${d.chapterId?`<p>${esc(d.chapterName)}</p>`:''}</div><div class="chips comment-tabs"><button class="chip ${d.scope==='comic'?'active':''}" ${action('commentScope',attr('scope','comic'))}>作品评论</button>${d.chapterId?`<button class="chip ${d.scope==='chapter'?'active':''}" ${action('commentScope',attr('scope','chapter'))}>本话评论</button>`:''}<span id="comment-total" class="quiet" role="status">${d.loaded?`${d.total} 条`:''}</span></div><section id="comment-list" aria-label="${d.scope==='chapter'?'本话评论':'作品评论'}">${commentCards()}</section></div>`;
+ app.innerHTML=`<div class="shell comments-shell"><header class="backhead"><button class="iconbtn" ${action('back')} aria-label="返回">${icon('arrow')}</button><strong>评论</strong><span style="flex:1"></span>${refreshButton('refreshComments','刷新评论',d.loading)}</header><div class="discussion-title"><h1>${esc(d.book.name)}</h1>${d.chapterId?`<p>${esc(d.chapterName)}</p>`:''}</div><div class="chips comment-tabs"><button class="chip ${d.scope==='comic'?'active':''}" ${action('commentScope',attr('scope','comic'))}>作品评论</button>${d.chapterId?`<button class="chip ${d.scope==='chapter'?'active':''}" ${action('commentScope',attr('scope','chapter'))}>本话评论</button>`:''}<span id="comment-total" class="quiet" role="status">${d.loaded?`${d.total} 条`:''}</span></div><section id="comment-list" aria-label="${d.scope==='chapter'?'本话评论':'作品评论'}">${commentCards()}</section></div>`;
  app.insertAdjacentHTML('beforeend','<div class="comment-compose-bar" id="comment-compose-bar"></div>');paintCommentCompose();
 }
 function paintCommentCompose(){
@@ -553,7 +568,7 @@ async function submitComment(){
   if(e.code==='COMMENT_UNCONFIRMED'&&$('#comment-check-status'))$('#comment-check-status').hidden=false;
  }finally{commentSending=false;updateCommentEditor();paintCommentCompose();}
 }
-function paintComments(d){if(discussion!==d||screen!=='comments')return;const list=$('#comment-list'),total=$('#comment-total');if(list)list.innerHTML=commentCards();if(total)total.textContent=d.loaded?`${d.total} 条`:'';paintCommentCompose();}
+function paintComments(d){if(discussion!==d||screen!=='comments')return;refreshBusy('refreshComments',d.loading);const list=$('#comment-list'),total=$('#comment-total');if(list){list.innerHTML=commentCards();if(!d.loading)AppMotion.arrive(list);}if(total)total.textContent=d.loaded?`${d.total} 条`:'';paintCommentCompose();}
 async function loadComments(reset=false){
  const d=discussion;if(!d||screen!=='comments'||d.loading&&!reset)return;
  if(reset){d.generation++;d.items=[];d.offset=0;d.total=0;d.loaded=false;}
@@ -594,10 +609,10 @@ async function openReader(book,chapter,group='default',page=0,refresh=false){
   const result=(await request('chapter',{comic:book.path_word,chapter,refresh})).results||{};
   if(!reader||reader.token!==token||screen!=='reader')return;
   if(result.is_lock)throw Error('当前章节被数据源限制，暂时无法阅读');
-  reader.info=result.chapter;reader.pages=orderedPages(result.chapter||{});reader.page=Math.min(Math.max(0,page),reader.pages.length-1);reader.loading=false;renderReader();AppMotion.enter($('.reader'));persistReading();
+  reader.info=result.chapter;reader.pages=orderedPages(result.chapter||{});reader.page=Math.min(Math.max(0,page),reader.pages.length-1);reader.loading=false;renderReader();persistReading();
  }catch(e){if(reader?.token!==token||screen!=='reader')return;reader.loading=false;reader.error=e.message;renderReader();}
 }
-function pageHtml(url,i){return `<div class="pagewrap" data-page="${i}"><img src="${esc(imgUrl(url))}" alt="第 ${i+1} 页" ${i<reader.page+3?'fetchpriority="high"':'loading="lazy"'} decoding="async" data-reader-image="${i}"><div class="page-caption">${i+1}</div></div>`;}
+function pageHtml(url,i){return `<div class="pagewrap" data-page="${i}"><img src="${esc(imgUrl(url))}" alt="第 ${i+1} 页" ${i<reader.page+3?'fetchpriority="high"':'loading="lazy"'} decoding="async" data-reader-image="${i}"><span class="reader-image-loading" aria-hidden="true">图片加载中…</span><div class="page-caption">${i+1}</div></div>`;}
 function renderReader(){
  const r=reader;if(!r)return;r.observer?.disconnect();chrome();
  app.innerHTML=`<section class="reader ${r.chrome?'':'hidden-chrome'}" aria-label="漫画阅读器"><header class="reader-top"><button class="iconbtn" ${action('back')} aria-label="返回详情">${icon('arrow')}</button><div class="reader-title"><strong>${esc(r.book.name)}</strong><p>${esc(r.info?.name||'正在打开章节…')}</p></div><button class="iconbtn" ${action('openChapterComments')} aria-label="查看本话评论" ${r.loading||r.error?'disabled':''}>${icon('comment')}</button><button class="iconbtn" ${action('readerMenu')} aria-label="阅读设置">${icon('settings')}</button></header><div id="reader-scroll" class="reader-scroll ${state.prefs.mode==='paged'?'paged':''}">${r.loading?'<div class="spinner"></div>':r.error?errorBox(r.error,'retryReader'):state.prefs.mode==='paged'?pageHtml(r.pages[r.page],r.page):r.pages.map(pageHtml).join('')+`<div class="reader-end">本话结束<br>${r.info.next?`<button ${action('nextChapter')}>下一话 ${icon('next')}</button>`:''}<button ${action('openChapterComments')}>本话评论</button><button ${action('readerCatalog')}>返回目录</button></div>`}</div>${!r.loading&&!r.error?`<footer class="reader-bottom"><div class="reader-controls"><button ${action('prevChapter')} ${!r.info.prev?'disabled':''}>上一话</button><button ${action('toggleMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'}</button><button ${action('readerCatalog')}>目录 ${icon('list')}</button><button ${action('nextChapter')} ${!r.info.next?'disabled':''}>下一话</button></div><input id="page-range" type="range" min="0" max="${r.pages.length-1}" step="1" value="${r.page}" aria-label="跳转阅读页码"><div class="counts"><span id="page-count">${r.page+1} / ${r.pages.length}</span></div></footer>`:''}</section>`;
@@ -614,9 +629,10 @@ function renderReader(){
  }else{
   warmReaderNeighbours(r);
  }
- let start=null;
- scroll.addEventListener('pointerdown',e=>{if(e.isPrimary){r.anchorPage=null;start={x:e.clientX,y:e.clientY,t:Date.now()};}},{passive:true});
- scroll.addEventListener('pointerup',e=>{if(!start||!e.isPrimary||e.target.closest('button,input')||Date.now()-start.t>700)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(state.prefs.mode==='paged'&&Math.abs(dx)>65&&Math.abs(dy)<70){step(dx<0?1:-1);return;}if(Math.abs(dx)>10||Math.abs(dy)>10)return;const frac=e.clientX/innerWidth;if(state.prefs.mode==='paged'&&(frac<.23||frac>.77)){step(frac<.23?-1:1);return;}toggleChrome();},{passive:true});
+ let start=null;const pointers=new Set();
+ scroll.addEventListener('pointerdown',e=>{pointers.add(e.pointerId);if(pointers.size>1){start=null;return;}if(e.isPrimary){r.anchorPage=null;start={x:e.clientX,y:e.clientY,t:Date.now()};}},{passive:true});
+ scroll.addEventListener('pointercancel',()=>{start=null;pointers.clear();},{passive:true});
+ scroll.addEventListener('pointerup',e=>{pointers.delete(e.pointerId);if(pointers.size){start=null;return;}if(!start||!e.isPrimary||e.target.closest('button,input')||Date.now()-start.t>700)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(state.prefs.mode==='paged'&&Math.abs(dx)>65&&Math.abs(dy)<70){step(dx<0?1:-1);return;}if(Math.abs(dx)>10||Math.abs(dy)>10)return;const frac=e.clientX/innerWidth;if(state.prefs.mode==='paged'&&(frac<.23||frac>.77)){step(frac<.23?-1:1);return;}toggleChrome();},{passive:true});
 }
 function $$(s,root=document){return [...root.querySelectorAll(s)];}
 function restoreAnchor(r){if(reader!==r||r.anchorPage===null||state.prefs.mode!=='vertical')return;const scroll=$('#reader-scroll'),target=$(`[data-page="${r.anchorPage}"]`);if(!scroll||!target)return;r.page=r.anchorPage;const top=target.getBoundingClientRect().top-scroll.getBoundingClientRect().top+scroll.scrollTop-(r.chrome?78:0);scroll.scrollTop=Math.max(0,top);updateCount();}
@@ -634,68 +650,94 @@ function persistReading(){
 window.persistReading=persistReading;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)persistReading();});
 window.addEventListener('pagehide',persistReading);
-function jumpPage(value){const r=reader;if(!r||r.loading||r.error)return;r.page=Math.max(0,Math.min(r.pages.length-1,Number(value)||0));if(state.prefs.mode==='paged'){const scroll=$('#reader-scroll');if(scroll)scroll.innerHTML=pageHtml(r.pages[r.page],r.page);updateCount();warmReaderNeighbours(r);}else{r.anchorPage=r.page;restoreAnchor(r);}persistReading();}
+function jumpPage(value){const r=reader;if(!r||r.loading||r.error)return;const previous=r.page;r.page=Math.max(0,Math.min(r.pages.length-1,Number(value)||0));if(state.prefs.mode==='paged'){const scroll=$('#reader-scroll');if(scroll)AppMotion.pageTurn(scroll,()=>{scroll.innerHTML=pageHtml(r.pages[r.page],r.page);},Math.sign(r.page-previous)||1,state.prefs.readerTurn);updateCount();warmReaderNeighbours(r);}else{r.anchorPage=r.page;restoreAnchor(r);}persistReading();}
 function step(direction){const r=reader;if(screen!=='reader'||!r||r.loading||r.error)return;if(state.prefs.mode==='paged'){if(r.page+direction<0){toast('已经是本话第一页');return;}if(r.page+direction>=r.pages.length){if(r.info.next)confirmModal('已经读完这一话','要继续打开下一话吗？',()=>changeChapter(1),'继续下一话');else toast('已经是最后一页');return;}jumpPage(r.page+direction);}else{r.anchorPage=null;$('#reader-scroll')?.scrollBy({top:direction*innerHeight*.8,behavior:'smooth'});}}
 window.ReaderStep=step;
 function toggleChrome(){if(!reader||reader.loading)return;reader.chrome=!reader.chrome;$('.reader')?.classList.toggle('hidden-chrome',!reader.chrome);}
 function changeChapter(direction){const r=reader;if(!r)return;const id=direction>0?r.info?.next:r.info?.prev;if(isWord(id)){r.observer?.disconnect();persistReading();openReader(r.book,id,r.group,0);}else toast(direction>0?'已经是最后一话':'已经是第一话');}
 async function resume(word){const h=historyFor(word);if(!h)return;mainScroll=window.scrollY;detail=null;openReader(h.book,h.chapter,h.group,h.page);}
 function back(){
- viewDirection=-1;
- if(modalRoot.children.length){closeModal();return;}
+ if(modalRoot.children.length){dismissModal();return;}
  if(screen==='shelfEdit'){shelfEditor?.requestClose();return;}
+ viewDirection=-1;viewReturning=true;
  if(screen==='comments'){const d=discussion;discussion=null;route++;screen=d?.from==='reader'&&reader?'reader':detail?'detail':'main';render();window.scrollTo(0,d?.scroll||0);return;}
  if(screen==='reader'){const r=reader;r?.observer?.disconnect();persistReading();route++;screen=detail?'detail':'main';reader=null;render();window.scrollTo(0,detail?detailScroll:mainScroll);return;}
- if(screen==='detail'){route++;screen='main';detail=null;render();window.scrollTo(0,mainScroll);return;}
- if(tab!=='discover'){setTab('discover');return;}
+ if(screen==='detail'){returnWord=detail?.word||'';route++;screen='main';detail=null;render();window.scrollTo(0,mainScroll);return;}
+ if(tab!=='discover'){setTab('discover',true);return;}
  if(Date.now()-exitAt<1800){if(window.ReaderNative)ReaderNative.exit();return;}exitAt=Date.now();toast('再按一次返回键退出');
 }
 window.AppBack=back;
-function closeModal(){if(loginBusy){toast('正在登录，请稍候');return;}if(commentSending){toast('正在发送，请稍候');return;}modalRoot.innerHTML='';commentEditor=null;document.body.style.overflow='';}
-function modal(title,body){if(gallery){cancelGalleryGesture();stopGallery(gallery);gallery.position=Math.round(gallery.position);paintGallery(gallery);}modalRoot.innerHTML=`<div class="modalshade" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modalhandle"></div><div class="sectionhead"><h2>${esc(title)}</h2><button class="textbtn" ${action('closeModal')} aria-label="关闭">${icon('close')}</button></div>${body}</section></div>`;document.body.style.overflow='hidden';$('.modal button')?.focus();}
+let modalFocus=null,modalClosing=null;
+async function dismissModal(){if(loginBusy||commentSending){closeModal();return;}const node=modalRoot.firstElementChild;if(!node)return;modalRoot.removeChild(node);node.inert=true;node.classList.add('modal-exit');node.style.pointerEvents='none';node.setAttribute('aria-hidden','true');node.removeAttribute('data-dismiss');$$('[id],[data-act],[role=dialog]',node).forEach(el=>{el.removeAttribute('id');el.removeAttribute('data-act');el.removeAttribute('role');});document.body.appendChild(node);closeModal();await AppMotion.leaveSheet($('.modal',node));node.remove();}
+function closeModal(){if(loginBusy){toast('正在登录，请稍候');return;}if(commentSending){toast('正在发送，请稍候');return;}modalRoot.innerHTML='';modalClosing=null;commentEditor=null;document.body.style.overflow='';if(modalFocus?.isConnected)modalFocus.focus({preventScroll:true});modalFocus=null;}
+function modal(title,body){$$('.modal-exit').forEach(n=>n.remove());if(!modalRoot.children.length)modalFocus=document.activeElement;modalClosing=null;if(gallery){cancelGalleryGesture();stopGallery(gallery);gallery.position=Math.round(gallery.position);paintGallery(gallery);}modalRoot.innerHTML=`<div class="modalshade" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modalhandle"></div><div class="sectionhead"><h2>${esc(title)}</h2><button class="textbtn" ${action('closeModal')} aria-label="关闭">${icon('close')}</button></div>${body}</section></div>`;document.body.style.overflow='hidden';$('.modal button')?.focus();AppMotion.sheet($('.modal'));}
 let confirmAction=null;
 function confirmModal(title,message,fn,label='确认'){confirmAction=fn;modal(title,`<p>${esc(message)}</p><div class="actions"><button class="btn outline" ${action('closeModal')}>取消</button><button class="btn" ${action('confirm')}>${esc(label)}</button></div>`);}
 const categories=[['','全部题材'],['baihe','百合'],['maoxian','冒险'],['qihuan','奇幻'],['aiqing','爱情'],['shenghuo','生活'],['xuanyi','悬疑'],['kehuan','科幻'],['xiaoyuan','校园'],['zhiyu','治愈'],['huanlexiang','欢乐向'],['zhichang','职场']];
 function categoryName(word){return categories.find(x=>x[0]===word)?.[1]||word;}
 function openCategories(){modal('题材',`<div class="chips" style="flex-wrap:wrap">${categories.map(([id,name])=>`<button class="chip ${listing.theme===id?'active':''}" ${action('category',attr('theme',id))}>${name}</button>`).join('')}</div>`);}
-function showTheme(){modal('界面主题',`<div class="chips">${[['system','跟随系统'],['light','浅色'],['dark','深色']].map(([id,label])=>`<button class="chip ${state.prefs.theme===id?'active':''}" ${action('setTheme',attr('value',id))}>${label}</button>`).join('')}</div>`);}
-function toggleMode(){persistReading();state.prefs.mode=state.prefs.mode==='vertical'?'paged':'vertical';save();if(screen==='reader')renderReader();else renderMain();}
+function showTheme(){modal('界面主题',`<div class="theme-choices">${[['system','跟随系统'],['light','浅色'],['dark','深色']].map(([id,label])=>`<button class="theme-choice ${state.prefs.theme===id?'selected':''}" ${action('setTheme',attr('value',id))} aria-pressed="${state.prefs.theme===id}"><span class="theme-swatch ${id}" aria-hidden="true"></span>${label}</button>`).join('')}</div>`);}
+function toggleMode(){persistReading();if(!setPreference('mode',state.prefs.mode==='vertical'?'paged':'vertical'))return;if(screen==='reader'){AppMotion.cancelTurn();renderReader();}else{const value=$('[data-act="readerMode"] .setting-value');if(value)value.textContent=state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读';}}
 function readerMenu(){modal('阅读偏好',`<div class="settingrow"><strong>阅读方式</strong><button class="textbtn" ${action('modalMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'} ${icon('next')}</button></div><div class="settingrow"><strong>音量键翻页</strong>${switchButton(state.prefs.volume,'modalVolume','音量键翻页')}</div><p>逐页模式：左右滑动或点击两侧翻页。双指缩放可放大画面，点击中间收起工具栏。</p>`);}
-function setTab(value){if(!['discover','shelf','history','settings'].includes(value))return;viewDirection=['discover','shelf','history','settings'].indexOf(value)>=['discover','shelf','history','settings'].indexOf(tab)?1:-1;if(shelfEditor){const editor=shelfEditor;shelfEditor=null;editor.destroy();}if(screen==='main')tabScroll[tab]=window.scrollY;if(reader){reader.observer?.disconnect();persistReading();reader=null;}route++;detail=null;discussion=null;screen='main';tab=value;closeModal();render();window.scrollTo(0,tabScroll[value]||0);if(value==='discover'&&!listing.loaded&&!listing.loading)loadList(true);if(value==='shelf'&&shelfTab==='cloud'&&account.loggedIn&&!cloud.loaded&&!cloud.loading)loadCloud();if(value==='settings')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
+function setTab(value,returning=false){if(!['discover','shelf','history','settings'].includes(value))return;AppMotion.discard();viewReturning=returning;viewDirection=['discover','shelf','history','settings'].indexOf(value)>=['discover','shelf','history','settings'].indexOf(tab)?1:-1;if(shelfEditor){const editor=shelfEditor;shelfEditor=null;editor.destroy();}if(screen==='main')tabScroll[tab]=window.scrollY;if(reader){reader.observer?.disconnect();persistReading();reader=null;}route++;detail=null;discussion=null;screen='main';tab=value;closeModal();render();window.scrollTo(0,tabScroll[value]||0);if(value==='discover'&&!listing.loaded&&!listing.loading)loadList(true);if(value==='shelf'&&shelfTab==='cloud'&&account.loggedIn&&!cloud.loaded&&!cloud.loading)loadCloud();if(value==='settings')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
 function search(){const q=$('#search-input')?.value.trim()||'';listing.query=q;listing.theme='';if(q){state.searches=[q,...state.searches.filter(x=>x!==q)].slice(0,12);save();}document.activeElement?.blur();loadList(true);}
 window.onImported=raw=>{
  try{
   const parsed=JSON.parse(raw);if(parsed?.version!==1||!parsed.favorites||!Array.isArray(parsed.history))throw Error('不支持的备份格式');
   const incoming=sanitize(parsed);if(!Object.keys(incoming.favorites).length&&!incoming.history.length&&!incoming.showcase.length)toast('该备份未包含书架或阅读记录');
   confirmModal('导入阅读备份',`发现 ${Object.keys(incoming.favorites).length} 部收藏、${incoming.history.length} 条记录${Array.isArray(parsed.showcase)?`、${incoming.showcase.length} 本自选漫画`:''}。将与本机内容合并，并使用备份中的阅读偏好。`,()=>{
+   const previous=state;state=sanitize(state);
    state.favorites=Object.assign(Object.create(null),state.favorites,incoming.favorites);
    const all=[...state.history,...incoming.history].sort((a,b)=>b.at-a.at),seen=new Set();state.history=all.filter(h=>{const word=h.book.path_word;if(seen.has(word))return false;seen.add(word);return true;}).slice(0,300);
-   if(Array.isArray(parsed.showcase))state.showcase=incoming.showcase;state.prefs=incoming.prefs;themeWanted=state.prefs.theme;shelfTab=state.prefs.shelfSource;save();render();toast('备份已合并');
+   if(Array.isArray(parsed.showcase))state.showcase=incoming.showcase;state.prefs=incoming.prefs;if(!save()){state=previous;render();return;}themeWanted=state.prefs.theme;shelfTab=state.prefs.shelfSource;render();toast('备份已合并');
   },'合并导入');
  }catch(e){toast('备份文件格式不正确，未修改本地数据');}
 };
+function filterSettings(query){
+ const q=query.trim().toLowerCase();let count=0;
+ document.querySelectorAll('[data-settings-group]').forEach(group=>{
+  const rows=$$('.settingrow,.settings-field',group);let matches=0;
+  rows.forEach(row=>{const match=!q||row.textContent.toLowerCase().includes(q);row.hidden=!match;if(match)matches++;});
+  group.hidden=!!q&&!matches;
+  group.dataset.filtering=q?'1':'';
+  if(q)group.open=matches>0;else group.open=state.prefs.settingsOpen.includes(group.dataset.settingsGroup);
+  $('.motion-guide',group)?.toggleAttribute('hidden',!!q);count+=matches;
+ });
+ const status=$('#settings-search-status');if(status)status.textContent=q?`找到 ${count} 项相关设置`:'';
+ $('#settings-no-results')?.toggleAttribute('hidden',!q||count>0);$('[data-act="clearSettingsSearch"]')?.toggleAttribute('hidden',!q);
+}
+function setPreference(key,value){const old=state.prefs[key];state.prefs[key]=value;if(!save()){state.prefs[key]=old;return false;}return true;}
+function syncMotionSettings(){
+ const off=state.prefs.motionStyle==='none';if($('#motion-speed'))$('#motion-speed').disabled=off;
+ const button=$('[data-act="toggleMotion"]');if(button){button.setAttribute('aria-checked',!off);$('.switch',button)?.classList.toggle('on',!off);}
+ if($('#motion-hint'))$('#motion-hint').textContent=reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':off?'页面转场和翻页动画均已关闭。':'跟随系统的“减少动态效果”设置。';
+}
+const editingField=element=>element?.matches?.('input:not([type=range]):not([type=checkbox]),textarea');
+document.addEventListener('focusin',e=>{if(editingField(e.target))document.body.classList.add('keyboard-editing');});
+document.addEventListener('focusout',()=>{queueMicrotask(()=>document.body.classList.toggle('keyboard-editing',!!editingField(document.activeElement)));});
 document.addEventListener('submit',e=>{if(screen==='shelfEdit'&&shelfEditor?.submit(e))return;if(e.target.id==='search-form'){e.preventDefault();search();}if(e.target.id==='login-form'){e.preventDefault();submitLogin();}if(e.target.id==='comment-form'){e.preventDefault();submitComment();}});
-document.addEventListener('toggle',e=>{const group=e.target;if(!group.matches?.('[data-settings-group]')||!group.isConnected)return;const open=new Set(state.prefs.settingsOpen),id=group.dataset.settingsGroup;if(group.open)open.add(id);else open.delete(id);const next=['reading','motion','data','network'].filter(x=>open.has(x));if(JSON.stringify(next)!==JSON.stringify(state.prefs.settingsOpen)){state.prefs.settingsOpen=next;save();if(group.open)AppMotion.enter($('.settings-group-body',group));}},true);
+document.addEventListener('toggle',e=>{const group=e.target;if(!group.matches?.('[data-settings-group]')||!group.isConnected||$('#settings-search')?.value.trim())return;const open=new Set(state.prefs.settingsOpen),id=group.dataset.settingsGroup;if(group.open)open.add(id);else open.delete(id);const next=['reading','motion','data','network'].filter(x=>open.has(x));if(JSON.stringify(next)!==JSON.stringify(state.prefs.settingsOpen)){state.prefs.settingsOpen=next;save();}},true);
 document.addEventListener('change',e=>{
- if(e.target.id==='motion-style'){state.prefs.motionStyle=['fade','slide','none'].includes(e.target.value)?e.target.value:'fade';save();AppMotion.sync();if($('#motion-speed'))$('#motion-speed').disabled=state.prefs.motionStyle==='none';AppMotion.enter($('#motion-preview'));}
- if(e.target.id==='motion-speed'){state.prefs.motionSpeed=['quick','standard','calm'].includes(e.target.value)?e.target.value:'standard';save();AppMotion.sync();AppMotion.enter($('#motion-preview'));}
+ if(e.target.id==='motion-speed'){if(!setPreference('motionSpeed',['quick','standard','calm'].includes(e.target.value)?e.target.value:'standard'))e.target.value=state.prefs.motionSpeed;AppMotion.sync();AppMotion.preview($('#motion-preview'));}
  if(e.target.id==='show-password'&&$('#login-password'))$('#login-password').type=e.target.checked?'text':'password';
  if(e.target.id==='group-select'){cancelChapterLocation(detail);detail.group=e.target.value;detail.filter='';if($('#chapter-filter'))$('#chapter-filter').value='';loadChapters(true);}
  if(e.target.id==='page-range')jumpPage(e.target.value);
 });
-document.addEventListener('input',e=>{if(screen==='shelfEdit')shelfEditor?.input(e);if(e.target.id==='comment-text')updateCommentEditor();if(e.target.id==='chapter-filter'&&detail){cancelChapterLocation(detail);detail.filter=e.target.value;$('#chapter-list').innerHTML=chapterCards();paintChapterLocation(detail);}if(e.target.id==='page-range'&&reader){$('#page-count').textContent=`${Number(e.target.value)+1} / ${reader.pages.length}`;}});
-document.addEventListener('error',e=>{const el=e.target;if(el.matches?.('[data-cover]'))el.classList.add('failed');if(el.matches?.('[data-reader-image]')&&el.isConnected){if(el.complete&&el.naturalWidth>0)return;el.style.display='none';if($('.image-error',el.parentNode))return;const box=document.createElement('div');box.className='image-error';box.innerHTML=`第 ${Number(el.dataset.readerImage)+1} 页加载失败<button ${action('retryImage',attr('page',el.dataset.readerImage))}>点这里重试</button>`;el.parentNode.appendChild(box);}},true);
-document.addEventListener('load',e=>{const el=e.target;if(el.matches?.('img[data-cover]'))AppMotion.reveal(el);if(el.matches?.('[data-reader-image]')&&el.isConnected){el.style.display='';$('.image-error',el.parentNode)?.remove();if(reader&&reader.anchorPage!==null&&Number(el.dataset.readerImage)<=reader.anchorPage)requestAnimationFrame(()=>{if(reader)restoreAnchor(reader);});}},true);
+document.addEventListener('input',e=>{if(e.target.id==='settings-search')filterSettings(e.target.value);if(screen==='shelfEdit')shelfEditor?.input(e);if(e.target.id==='comment-text')updateCommentEditor();if(e.target.id==='chapter-filter'&&detail){cancelChapterLocation(detail);detail.filter=e.target.value;$('#chapter-list').innerHTML=chapterCards();paintChapterLocation(detail);}if(e.target.id==='page-range'&&reader){$('#page-count').textContent=`${Number(e.target.value)+1} / ${reader.pages.length}`;}});
+document.addEventListener('error',e=>{const el=e.target;if(el.matches?.('[data-cover]'))el.classList.add('failed');if(el.matches?.('[data-reader-image]')&&el.isConnected){if(el.complete&&el.naturalWidth>0)return;el.parentNode.classList.add('has-error');el.style.display='none';if($('.image-error',el.parentNode))return;const box=document.createElement('div');box.className='image-error';box.innerHTML=`第 ${Number(el.dataset.readerImage)+1} 页加载失败<button ${action('retryImage',attr('page',el.dataset.readerImage))}>点这里重试</button>`;el.parentNode.appendChild(box);}},true);
+document.addEventListener('load',e=>{const el=e.target;if(el.matches?.('img[data-cover]'))AppMotion.reveal(el);if(el.matches?.('[data-reader-image]')&&el.isConnected){el.parentNode.classList.add('has-image');el.parentNode.classList.remove('has-error');el.style.display='';$('.image-error',el.parentNode)?.remove();if(reader&&reader.anchorPage!==null&&Number(el.dataset.readerImage)<=reader.anchorPage)requestAnimationFrame(()=>{if(reader)restoreAnchor(reader);});}},true);
 document.addEventListener('click',async e=>{
  if(screen==='shelfEdit'&&shelfEditor&&(shelfEditor.menuClick(e)||shelfEditor.click(e)))return;
  if(e.detail!==0&&e.target.closest('.shelf-gallery')&&Date.now()<gallerySuppressUntil){e.preventDefault();return;}
- if(e.target.matches('[data-dismiss]')){closeModal();return;}
+ const summary=e.target.closest('.settings-group>summary');if(summary){e.preventDefault();AppMotion.disclosure(summary.parentElement);return;}
+ if(e.target.matches('[data-dismiss]')){dismissModal();return;}
  const b=e.target.closest('[data-act]');if(!b||b.disabled)return;const a=b.dataset.act;
+ if(a==='book'||a==='galleryBook'&&!Number(b.dataset.offset))AppMotion.capture(b.classList.contains('gallery-caption')?$('.paper-book.is-current'):b);
  switch(a){
  case 'accountSettings':if(loginBusy){toast('正在登录，请稍候');break;}closeModal();if(screen==='shelfEdit'&&shelfEditor){const editor=shelfEditor;editor.requestClose(()=>{finishShelfEditor(editor,false);setTab('settings');if($('#settings-network'))$('#settings-network').open=true;$('#account-api-url')?.scrollIntoView({block:'center'});});}else{setTab('settings');if($('#settings-network'))$('#settings-network').open=true;$('#account-api-url')?.scrollIntoView({block:'center'});}break;
  case 'saveAccountApi':{const error=window.ReaderNative?ReaderNative.setAccountApi($('#account-api-url').value,$('#account-protocol').value):'请在 Android 应用中设置';toast(error||'账号线路已保存，下次登录使用新设置');}break;
- case 'resetAccountApi':if(window.ReaderNative){ReaderNative.setAccountApi('https://api.copy202601.com','modern');renderMain();toast('已恢复新版账号线路，请重新登录');}break;
- case 'legacyAccountApi':if(window.ReaderNative){ReaderNative.setAccountApi('https://api.2024manga.com','legacy');renderMain();toast('已选择旧版账号线路，请重新登录');}break;
+ case 'resetAccountApi':if(window.ReaderNative){const error=ReaderNative.setAccountApi('https://api.copy202601.com','modern');if(error){toast(error);break;}$('#account-api-url').value=ReaderNative.getAccountApi();$('#account-protocol').value='modern';toast('已恢复新版账号线路，请重新登录');}break;
+ case 'legacyAccountApi':if(window.ReaderNative){const error=ReaderNative.setAccountApi('https://api.2024manga.com','legacy');if(error){toast(error);break;}$('#account-api-url').value=ReaderNative.getAccountApi();$('#account-protocol').value='legacy';toast('已选择旧版账号线路，请重新登录');}break;
  case 'login':showLogin();break;
  case 'logout':confirmModal('退出当前账号','退出后会清除本机的登录凭证。本地收藏与阅读记录会保留。',logout,'退出登录');break;
  case 'showCloud':chooseShelfSource('cloud');setTab('shelf');break;
@@ -714,9 +756,10 @@ document.addEventListener('click',async e=>{
  case 'tab':setTab(b.dataset.tab);break;
  case 'quickTheme':changeTheme((themeWanted==='dark'||themeWanted==='system'&&systemDark.matches)?'light':'dark',b);break;
  case 'theme':showTheme();break;
- case 'toggleThemeRipple':state.prefs.themeRipple=!state.prefs.themeRipple;save();b.setAttribute('aria-checked',state.prefs.themeRipple);$('.switch',b)?.classList.toggle('on',state.prefs.themeRipple);break;
  case 'toggleShelfHaptics':state.prefs.shelfHaptics=!state.prefs.shelfHaptics;save();b.setAttribute('aria-checked',state.prefs.shelfHaptics);$('.switch',b)?.classList.toggle('on',state.prefs.shelfHaptics);break;
- case 'previewMotion':AppMotion.enter($('#motion-preview'));break;
+ case 'previewMotion':AppMotion.preview($('#motion-preview'));break;
+ case 'toggleMotion':if(setPreference('motionStyle',state.prefs.motionStyle==='none'?'unified':'none')){AppMotion.stop();AppMotion.sync();syncMotionSettings();}break;
+ case 'toggleReaderTurn':if(setPreference('readerTurn',state.prefs.readerTurn==='none'?'paper':'none')){const on=state.prefs.readerTurn!=='none';b.setAttribute('aria-checked',on);$('.switch',b)?.classList.toggle('on',on);AppMotion.cancelTurn();}break;
  case 'aboutApp':showAbout();break;
  case 'setTheme':closeModal();changeTheme(b.dataset.value);break;
  case 'search':search();break;
@@ -727,7 +770,7 @@ document.addEventListener('click',async e=>{
  case 'categories':openCategories();break;
  case 'category':listing.theme=b.dataset.theme;listing.query='';closeModal();loadList(true);break;
  case 'book':if(screen==='main'&&tab==='shelf'){const books=displayBooks(),index=books.findIndex(book=>book.path_word===b.dataset.word);if(index>=0){let cursor=index;if(gallery){stopGallery(gallery);const current=Math.round(gallery.position),delta=index-galleryBookIndex(current,books.length);cursor=current+delta-Math.round(delta/books.length)*books.length;gallery.position=cursor;}galleryIndex[shelfTab]=cursor;}}openBook(b.dataset.word);break;
- case 'reloadDetail':{const word=detail?.word;if(word){try{await request('detail',{comic:word,refresh:true});}catch(e){}openBook(word);}}break;
+ case 'reloadDetail':{const word=detail?.word;if(word)openBook(word,{refresh:true});}break;
  case 'favorite':favorite();break;
  case 'openComicComments':openComments('comic');break;
  case 'openChapterComments':openComments('chapter');break;
@@ -746,7 +789,7 @@ document.addEventListener('click',async e=>{
  case 'clearHistory':confirmModal('清空阅读记录','书架中的收藏会保留。阅读进度清空后无法撤销。',()=>{state.history=[];save();render();toast('阅读记录已清空');},'清空记录');break;
  case 'removeHistory':state.history=state.history.filter(h=>h.book.path_word!==b.dataset.word);save();render();break;
  case 'readerMode':case 'toggleMode':toggleMode();break;
- case 'volume':state.prefs.volume=!state.prefs.volume;save();render();break;
+ case 'volume':if(setPreference('volume',!state.prefs.volume)){b.setAttribute('aria-checked',state.prefs.volume);$('.switch',b)?.classList.toggle('on',state.prefs.volume);chrome();}break;
  case 'readerMenu':readerMenu();break;
  case 'modalMode':closeModal();toggleMode();break;
  case 'modalVolume':state.prefs.volume=!state.prefs.volume;save();chrome();readerMenu();break;
@@ -754,18 +797,20 @@ document.addEventListener('click',async e=>{
  case 'prevChapter':changeChapter(-1);break;
  case 'nextChapter':changeChapter(1);break;
  case 'retryReader':{const r=reader;if(r)openReader(r.book,r.chapter,r.group,r.page,true);}break;
- case 'retryImage':{const wrap=$(`[data-page="${b.dataset.page}"]`),image=$('img',wrap);$('.image-error',wrap)?.remove();image.style.display='';image.src=imgUrl(reader.pages[Number(b.dataset.page)])+'&retry='+Date.now();}break;
- case 'closeModal':closeModal();break;
+ case 'retryImage':{const wrap=$(`[data-page="${b.dataset.page}"]`),image=$('img',wrap);$('.image-error',wrap)?.remove();wrap.classList.remove('has-image','has-error');image.style.display='';image.src=imgUrl(reader.pages[Number(b.dataset.page)])+'&retry='+Date.now();}break;
+ case 'closeModal':dismissModal();break;
+ case 'clearSettingsSearch':$('#settings-search').value='';filterSettings('');$('#settings-search').focus();break;
  case 'confirm':{const fn=confirmAction;confirmAction=null;closeModal();fn?.();}break;
  case 'export':if(window.ReaderNative)ReaderNative.exportData(JSON.stringify(state,null,2));else toast('请在 Android 应用中导出备份');break;
  case 'import':if(window.ReaderNative)ReaderNative.importData();else toast('请在 Android 应用中导入备份');break;
- case 'clearCache':b.disabled=true;try{await request('clearCache');toast('图片缓存已清理');setTab('settings');}catch(e){toast(e.message);}finally{b.disabled=false;}break;
+ case 'clearCache':b.disabled=true;try{await request('clearCache');toast('图片缓存已清理');if($('#cache-size'))$('#cache-size').textContent='当前约 0 MB · 上限约 120 MB';}catch(e){toast(e.message);}finally{b.disabled=false;}break;
  case 'saveApi':{const error=window.ReaderNative?ReaderNative.setApi($('#api-url').value):'请在 Android 应用中设置';toast(error||'线路已保存，可返回发现页刷新');}break;
  case 'resetApi':if(window.ReaderNative){ReaderNative.setApi('https://api.2024manga.com');$('#api-url').value=ReaderNative.getApi();toast('已恢复默认线路');}break;
- case 'testApi':{b.disabled=true;const old=b.textContent;b.textContent='连接中…';try{if(window.ReaderNative){const err=ReaderNative.setApi($('#api-url').value);if(err)throw Error(err);}await request('ping');toast('连接正常，已收到漫画数据');}catch(e){toast(e.message);}finally{b.disabled=false;b.textContent=old;}}break;
+ case 'testApi':{b.disabled=true;const old=b.textContent;b.textContent='连接中…';try{const address=$('#api-url').value.trim();await request('ping',{base:address});toast('此线路连接正常，点击保存后生效');}catch(e){toast(e.message);}finally{b.disabled=false;b.textContent=old;}}break;
  }
 });
 document.addEventListener('pointerdown',e=>{
+ if(e.target.closest('.paper-stage,.reader-scroll'))AppMotion.finishRoute();
  if(e.target.closest('.shelf-gallery'))gallerySuppressUntil=0;
  const stage=e.target.closest('.paper-stage'),g=gallery;
  if(!g||stage!==g.stage||!e.isPrimary||e.button!==0)return;
@@ -800,6 +845,6 @@ window.addEventListener('scroll',()=>{if(!headerScrollFrame)headerScrollFrame=re
 window.addEventListener('resize',()=>{cancelAnimationFrame(galleryResizeFrame);galleryResizeFrame=requestAnimationFrame(resizeGallery);});
 reducedMotion.addEventListener?.('change',()=>{cancelGalleryGesture();const g=gallery;if(g){stopGallery(g);g.position=Math.round(g.position);g.velocity=0;paintGallery(g);}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&gallery){cancelGalleryGesture();const g=gallery;stopGallery(g);g.position=Math.round(g.position);g.velocity=0;paintGallery(g);}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){back();e.preventDefault();}if(screen==='reader'&&!modalRoot.children.length&&['ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.key)){step(['ArrowRight','ArrowDown'].includes(e.key)?1:-1);e.preventDefault();}const stage=e.target.closest('.shelf-stage');if(stage&&['ArrowLeft','ArrowRight'].includes(e.key)){moveGallery(stage.dataset.gallery,e.key==='ArrowRight'?1:-1);document.querySelector('.shelf-stage')?.focus({preventScroll:true});e.preventDefault();}});
+document.addEventListener('keydown',e=>{if(modalRoot.children.length){if(e.key==='Escape'){e.preventDefault();dismissModal();return;}if(e.key==='Tab'){const nodes=$$('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',modalRoot).filter(n=>n.getClientRects().length);const first=nodes[0],last=nodes.at(-1);if(first&&e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(last&&!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}return;}if(e.key==='Escape'){back();e.preventDefault();}if(screen==='reader'&&!modalRoot.children.length&&['ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.key)){step(['ArrowRight','ArrowDown'].includes(e.key)?1:-1);e.preventDefault();}const stage=e.target.closest('.shelf-stage');if(stage&&['ArrowLeft','ArrowRight'].includes(e.key)){moveGallery(stage.dataset.gallery,e.key==='ArrowRight'?1:-1);document.querySelector('.shelf-stage')?.focus({preventScroll:true});e.preventDefault();}});
 render();loadList(true);initAccount();
 })();
