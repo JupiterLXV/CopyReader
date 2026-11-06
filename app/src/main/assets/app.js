@@ -597,12 +597,12 @@ function settingsSections(){
  const network=`<section class="panel"><div class="settings-field"><strong>账号登录线路</strong><p class="quiet">下次登录生效</p><label for="account-api-url" class="sr-only">HTTPS 账号接口域名</label><input id="account-api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getAccountApi():'https://api.copy202601.com')}"><select id="account-protocol" aria-label="账号登录协议"><option value="modern" ${!window.ReaderNative||ReaderNative.getAccountProtocol()==='modern'?'selected':''}>新版账号协议</option><option value="legacy" ${window.ReaderNative&&ReaderNative.getAccountProtocol()==='legacy'?'selected':''}>旧版兼容协议</option></select><div class="actions"><button class="btn small secondary" ${action('saveAccountApi')}>保存账号线路</button><button class="btn small outline" ${action('resetAccountApi')}>恢复新版默认</button></div><button class="textbtn rowgap" ${action('legacyAccountApi')}>使用旧版账号线路</button></div></section><section class="panel"><div class="settings-field"><strong>漫画数据线路</strong><p class="quiet">默认题材和搜索使用新版目录。账号线路独立设置。</p><label for="api-url" class="sr-only">HTTPS 数据接口域名</label><input id="api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getApi():'https://api.2024manga.com')}"><div class="actions"><button class="btn small secondary" ${action('saveApi')}>保存漫画线路</button><button class="btn small outline" ${action('testApi')}>测试漫画连接</button></div><button class="textbtn rowgap" ${action('resetApi')}>恢复默认漫画线路</button></div></section>`;
  return {reading,motion,data,network};
 }
-function settingsContent(){return `<section id="settings-account" aria-label="账号资料">${accountCard()}</section><div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off" value="${esc(settingsSearchValue)}"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" ${settingsSearchValue?'':'hidden'}>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-entries">${Object.entries(settingsMeta).map(([id,m])=>`<button class="feature-entry archive-panel" ${action('settingsPage',attr('value',id))} data-settings-target="${id}"><span class="feature-entry-content">${icon(m.icon)}<span><strong>${m.title}</strong><small>${m.note}</small></span>${icon('next')}</span></button>`).join('')}</div><div class="settings-search-results" hidden></div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.13.1 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;}
+function settingsContent(){return `<section id="settings-account" aria-label="账号资料">${accountCard()}</section><div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off" value="${esc(settingsSearchValue)}"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" ${settingsSearchValue?'':'hidden'}>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-entries">${Object.entries(settingsMeta).map(([id,m])=>`<button class="feature-entry archive-panel" ${action('settingsPage',attr('value',id))} data-settings-target="${id}"><span class="feature-entry-content">${icon(m.icon)}<span><strong>${m.title}</strong><small>${m.note}</small></span>${icon('next')}</span></button>`).join('')}</div><div class="settings-search-results" hidden></div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.13.2 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;}
 function openSettingsSection(id){if(!settingsMeta[id]||screen!=='main'||tab!=='settings')return;settingsSearchValue=$('#settings-search')?.value||'';settingsHomeScroll=window.scrollY;document.activeElement?.blur();settingsSection=id;screen='settings';route++;viewReturning=false;viewDirection=1;render();window.scrollTo(0,0);}
 function renderSettingsDetail(){const id=settingsSection,m=settingsMeta[id];if(!m)return;app.innerHTML=`<div class="shell page-settings-sub" data-settings-section="${id}"><header class="settings-subhead"><button class="iconbtn" ${action('back')} aria-label="返回设置">${icon('arrow')}</button><div class="archive-route-title"><h1>${m.title}</h1><span class="archive-code" aria-hidden="true">${m.code}</span></div><button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></header><div id="main-content"><div class="archive-section" aria-hidden="true"><span class="archive-code">${m.code}</span><span class="archive-rule"></span><i></i></div>${settingsGroup(id,settingsSections()[id])}</div></div>`;AppMotion.bindBackGesture(app.firstElementChild,back);if(id==='data')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
 function closeSettingsSection(){if(screen!=='settings')return;const id=settingsSection;screen='main';tab='settings';settingsSection='';viewReturning=true;viewDirection=-1;route++;render();window.scrollTo(0,settingsHomeScroll);$(`[data-settings-target="${id}"]`)?.focus({preventScroll:true});}
 
-function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.13.1</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
+function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.13.2</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
 function findBook(word){return catalog?.list.items.find(b=>b.path_word===word)||listing.items.find(b=>b.path_word===word)||cloud.items.find(b=>b.path_word===word)||state.favorites[word]||state.showcase.find(b=>b.path_word===word)||state.history.find(h=>h.book.path_word===word)?.book||detail?.book;}
 function historyFor(word){return state.history.find(h=>h.book.path_word===word);}
 async function openBook(word,options={}){
@@ -876,7 +876,10 @@ async function openReader(book,chapter,group='default',page=0,refresh=false){
   reader.info=result.chapter;reader.pages=orderedPages(result.chapter||{});reader.page=Math.min(Math.max(0,page),reader.pages.length-1);reader.loading=false;renderReader();persistReading();
  }catch(e){if(reader?.token!==token||screen!=='reader')return;reader.loading=false;reader.error=e.message;renderReader();}
 }
-function pageHtml(url,i){return `<div class="pagewrap" data-page="${i}"><img src="${esc(imgUrl(url))}" alt="第 ${i+1} 页" ${i<reader.page+3?'fetchpriority="high"':'loading="lazy"'} decoding="async" data-reader-image="${i}"><span class="reader-image-loading" aria-hidden="true">图片加载中…</span><div class="page-caption">${i+1}</div></div>`;}
+function pageHtml(url,i){
+ const caption=state.prefs.mode==='paged'?`<div class="page-caption">${i+1}</div>`:'';
+ return `<div class="pagewrap" data-page="${i}"><img src="${esc(imgUrl(url))}" alt="第 ${i+1} 页" ${i<reader.page+3?'fetchpriority="high"':'loading="lazy"'} decoding="async" data-reader-image="${i}"><span class="reader-image-loading" aria-hidden="true">图片加载中…</span>${caption}</div>`;
+}
 function renderReader(){
  const r=reader;if(!r)return;r.observer?.disconnect();chrome();
  app.innerHTML=`<section class="reader ${r.chrome?'':'hidden-chrome'}" aria-label="漫画阅读器"><header class="reader-top"><button class="iconbtn" ${action('back')} aria-label="返回详情">${icon('arrow')}</button><div class="reader-title"><strong>${esc(r.book.name)}</strong><p>${esc(r.info?.name||'正在打开章节…')}</p></div><button class="iconbtn" ${action('openChapterComments')} aria-label="查看本话评论" ${r.loading||r.error?'disabled':''}>${icon('comment')}</button><button class="iconbtn" ${action('readerMenu')} aria-label="阅读设置">${icon('settings')}</button></header><div id="reader-scroll" class="reader-scroll ${state.prefs.mode==='paged'?'paged':''}">${r.loading?'<div class="spinner"></div>':r.error?errorBox(r.error,'retryReader'):state.prefs.mode==='paged'?pageHtml(r.pages[r.page],r.page):r.pages.map(pageHtml).join('')+`<div class="reader-end">本话结束<br>${r.info.next?`<button ${action('nextChapter')}>下一话 ${icon('next')}</button>`:''}<button ${action('openChapterComments')}>本话评论</button><button ${action('readerCatalog')}>返回目录</button></div>`}</div>${!r.loading&&!r.error?`<footer class="reader-bottom"><div class="reader-controls"><button ${action('prevChapter')} ${!r.info.prev?'disabled':''}>上一话</button><button ${action('toggleMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'}</button><button ${action('readerCatalog')}>目录 ${icon('list')}</button><button ${action('nextChapter')} ${!r.info.next?'disabled':''}>下一话</button></div><input id="page-range" type="range" min="0" max="${r.pages.length-1}" step="1" value="${r.page}" aria-label="跳转阅读页码"><div class="counts"><span id="page-count">${r.page+1} / ${r.pages.length}</span></div></footer>`:''}</section>`;
@@ -893,10 +896,38 @@ function renderReader(){
  }else{
   warmReaderNeighbours(r);
  }
- let start=null;const pointers=new Set();
- scroll.addEventListener('pointerdown',e=>{pointers.add(e.pointerId);if(pointers.size>1){start=null;return;}if(e.isPrimary){r.anchorPage=null;start={x:e.clientX,y:e.clientY,t:Date.now()};}},{passive:true});
- scroll.addEventListener('pointercancel',()=>{start=null;pointers.clear();},{passive:true});
- scroll.addEventListener('pointerup',e=>{pointers.delete(e.pointerId);if(pointers.size){start=null;return;}if(!start||!e.isPrimary||e.target.closest('button,input')||Date.now()-start.t>700)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(state.prefs.mode==='paged'&&Math.abs(dx)>65&&Math.abs(dy)<70){step(dx<0?1:-1);return;}if(Math.abs(dx)>10||Math.abs(dy)>10)return;const frac=e.clientX/innerWidth;if(state.prefs.mode==='paged'&&(frac<.23||frac>.77)){step(frac<.23?-1:1);return;}toggleChrome();},{passive:true});
+ bindReaderGestures(scroll,r);
+}
+function bindReaderGestures(scroll,r){
+ const paged=scroll.classList.contains('paged'),passive={passive:true};
+ let press=null,lastScroll=-Infinity;
+ if(!paged)scroll.addEventListener('scroll',()=>{if(r.anchorPage===null)lastScroll=performance.now();},passive);
+ scroll.parentElement.addEventListener('pointerdown',e=>{
+  if(!scroll.contains(e.target)||!e.isPrimary||e.button!==0||e.target.closest('button,input')){press=null;return;}
+  r.anchorPage=null;
+  press={id:e.pointerId,x:e.clientX,y:e.clientY,at:performance.now(),top:scroll.scrollTop,moved:false};
+ },{capture:true,passive:true});
+ scroll.addEventListener('pointermove',e=>{
+  if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>10)press.moved=true;
+ },passive);
+ const cancel=e=>{if(press?.id===e.pointerId)press=null;};
+ for(const event of ['pointercancel','pointerleave','lostpointercapture'])scroll.addEventListener(event,cancel,passive);
+ scroll.addEventListener('pointerup',e=>{
+  if(press?.id!==e.pointerId)return;
+  const start=press;press=null;
+  if(!e.isPrimary||!scroll.isConnected||e.target.closest('button,input'))return;
+  const dx=e.clientX-start.x,dy=e.clientY-start.y,duration=performance.now()-start.at;
+  if(paged&&duration<=700&&Math.abs(dx)>65&&Math.abs(dy)<70){step(dx<0?1:-1);return;}
+  if(duration>320||start.moved||Math.hypot(dx,dy)>10)return;
+  if(!paged&&(lastScroll>=start.at-120||scroll.scrollTop!==start.top))return;
+  const viewport=window.visualViewport;
+  const left=viewport?.offsetLeft||0,top=viewport?.offsetTop||0;
+  const width=viewport?.width||innerWidth,height=viewport?.height||innerHeight;
+  const x=(e.clientX-left)/width;
+  if(paged&&(x<.23||x>.77)){step(x<.23?-1:1);return;}
+  const centered=(x,y)=>Math.abs((x-left)/width-.5)<=.2&&Math.abs((y-top)/height-.5)<=.2;
+  if(centered(start.x,start.y)&&centered(e.clientX,e.clientY))toggleChrome();
+ },passive);
 }
 function $$(s,root=document){return [...root.querySelectorAll(s)];}
 function restoreAnchor(r){if(reader!==r||r.anchorPage===null||state.prefs.mode!=='vertical')return;const scroll=$('#reader-scroll'),target=$(`[data-page="${r.anchorPage}"]`);if(!scroll||!target)return;r.page=r.anchorPage;const top=target.getBoundingClientRect().top-scroll.getBoundingClientRect().top+scroll.scrollTop-(r.chrome?78:0);scroll.scrollTop=Math.max(0,top);updateCount();}
@@ -917,7 +948,14 @@ window.addEventListener('pagehide',persistReading);
 function jumpPage(value){const r=reader;if(!r||r.loading||r.error)return;const previous=r.page;r.page=Math.max(0,Math.min(r.pages.length-1,Number(value)||0));if(state.prefs.mode==='paged'){const scroll=$('#reader-scroll');if(scroll)AppMotion.pageTurn(scroll,()=>{scroll.innerHTML=pageHtml(r.pages[r.page],r.page);},Math.sign(r.page-previous)||1,state.prefs.readerTurn);updateCount();warmReaderNeighbours(r);}else{r.anchorPage=r.page;restoreAnchor(r);}persistReading();}
 function step(direction){const r=reader;if(screen!=='reader'||!r||r.loading||r.error)return;if(state.prefs.mode==='paged'){if(r.page+direction<0){toast('已经是本话第一页');return;}if(r.page+direction>=r.pages.length){if(r.info.next)confirmModal('已经读完这一话','要继续打开下一话吗？',()=>changeChapter(1),'继续下一话');else toast('已经是最后一页');return;}jumpPage(r.page+direction);}else{r.anchorPage=null;$('#reader-scroll')?.scrollBy({top:direction*innerHeight*.8,behavior:'smooth'});}}
 window.ReaderStep=step;
-function toggleChrome(){if(!reader||reader.loading)return;reader.chrome=!reader.chrome;$('.reader')?.classList.toggle('hidden-chrome',!reader.chrome);}
+function toggleChrome(){
+ const r=reader,view=$('.reader'),scroll=$('#reader-scroll');
+ if(!r||r.loading||!view||!scroll)return;
+ const top=scroll.scrollTop,keepPosition=state.prefs.mode==='vertical'&&top>0;
+ const inset=keepPosition?parseFloat(getComputedStyle(scroll).paddingTop):0;
+ r.chrome=!r.chrome;view.classList.toggle('hidden-chrome',!r.chrome);
+ if(keepPosition)scroll.scrollTop=top+parseFloat(getComputedStyle(scroll).paddingTop)-inset;
+}
 function changeChapter(direction){const r=reader;if(!r)return;const id=direction>0?r.info?.next:r.info?.prev;if(isWord(id)){r.observer?.disconnect();persistReading();openReader(r.book,id,r.group,0);}else toast(direction>0?'已经是最后一话':'已经是第一话');}
 async function resume(word){const h=historyFor(word);if(!h)return;mainScroll=window.scrollY;detail=null;openReader(h.book,h.chapter,h.group,h.page);}
 function back(){
@@ -997,7 +1035,7 @@ function saveMangaApi(value,notice){
 }
 function showTheme(){modal('界面主题',`<div class="theme-choices">${[['system','跟随系统'],['light','浅色'],['dark','深色']].map(([id,label])=>`<button class="theme-choice ${state.prefs.theme===id?'selected':''}" ${action('setTheme',attr('value',id))} aria-pressed="${state.prefs.theme===id}"><span class="theme-swatch ${id}" aria-hidden="true"></span>${label}</button>`).join('')}</div>`);}
 function toggleMode(){persistReading();if(!setPreference('mode',state.prefs.mode==='vertical'?'paged':'vertical'))return;if(screen==='reader'){AppMotion.cancelTurn();renderReader();}else{const value=$('[data-act="readerMode"] .setting-value');if(value)value.textContent=state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读';}}
-function readerMenu(){modal('阅读偏好',`<div class="settingrow"><strong>阅读方式</strong><button class="textbtn" ${action('modalMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'} ${icon('next')}</button></div><div class="settingrow"><strong>音量键翻页</strong>${switchButton(state.prefs.volume,'modalVolume','音量键翻页')}</div><p>逐页模式：左右滑动或点击两侧翻页。双指缩放可放大画面，点击中间收起工具栏。</p>`);}
+function readerMenu(){modal('阅读偏好',`<div class="settingrow"><strong>阅读方式</strong><button class="textbtn" ${action('modalMode')}>${state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读'} ${icon('next')}</button></div><div class="settingrow"><strong>音量键翻页</strong>${switchButton(state.prefs.volume,'modalVolume','音量键翻页')}</div><p>轻点屏幕中央显示或收起菜单。逐页阅读时，可左右滑动或轻点两侧翻页。双指可缩放画面。</p>`);}
 function setTab(value,returning=false){
  const tabs=['discover','shelf','history','settings'];
  if(!tabs.includes(value))return;

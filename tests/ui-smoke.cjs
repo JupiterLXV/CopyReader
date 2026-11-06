@@ -168,6 +168,13 @@ function svg(label,seed=0){
  const shelfIdle=()=>page.waitForFunction(()=>document.querySelector('.paper-stage')?.dataset.motion==='idle'&&!document.querySelector('[data-motion-scene]'));
  const noOverflow=async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await page.goto(origin+'/assets/index.html');
+ if(process.env.READER_UI_ONLY){
+  await act('book').first().click();
+  await page.waitForSelector('.chapterbtn');
+  await act('startRead').click();
+  await require('./reader-gestures.cjs')({page,context,act,note});
+  assert.deepEqual(errors,[]);await browser.close();return;
+ }
  if(process.env.ACCOUNT_FEATURES_ONLY){
   await require('./account-catalog.cjs')({page,root,act,calls,note,chooseTab,noOverflow,avatarId,
    setPostMode:value=>postMode=value,setProfileMode:value=>profileMode=value,setAvatarMode:value=>avatarMode=value});
@@ -204,6 +211,7 @@ function svg(label,seed=0){
  await act('startRead').click();await page.waitForSelector('.reader-bottom');
  const order=await page.locator('[data-reader-image]').evaluateAll(els=>els.map(el=>new URL(el.src).searchParams.get('url')));
  assert.deepEqual(order,[0,1,2,3].map(n=>'https://fixture.example/page'+n+'.png'+(imageSeed?'?case='+imageSeed:'')));note('shuffled chapter words are restored into correct page order');
+ await require('./reader-gestures.cjs')({page,context,act,note});
  await act('toggleMode').click();await page.waitForSelector('.reader-scroll.paged');
  await page.evaluate(()=>{window.keptToolbar=document.querySelector('.reader-bottom');window.keptRange=document.querySelector('#page-range');window.keptViewport=document.querySelector('#reader-scroll');});
  await page.evaluate(()=>window.ReaderStep(1));assert.match(await page.locator('#page-count').innerText(),/^2 \/ 4/);
@@ -407,7 +415,7 @@ function svg(label,seed=0){
  assert.equal(await act('toggleThemeRipple').count(),0);assert.equal(await page.getByText('主题圆形扩散',{exact:true}).count(),0);await act('quickTheme').click();await page.waitForSelector('body.dark');await page.waitForFunction(()=>!document.documentElement.classList.contains('theme-transitioning'));note('the redundant theme switch is removed while the circular theme reveal remains enabled');
  await openSettings('motion');await act('toggleShelfHaptics').click();assert.equal(await act('toggleShelfHaptics').getAttribute('aria-checked'),'false');await openSettings('motion');await act('toggleMotion').click();await chooseTab('shelf');await shelfIdle();assert.equal(await page.locator('#main-content').evaluate(el=>el.getAnimations().length),0);const offHaptics=await page.evaluate(()=>window.fixtureHaptics.length);await flick(1);await shelfIdle();assert.equal(await page.evaluate(()=>window.fixtureHaptics.length),offHaptics);note('disabled page animation creates no entry effect and disabled shelf haptics create no bridge calls');
  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.page-discover .bookcard').length===24);await chooseTab('settings');await openSettings('motion');assert.equal(await act('toggleMotion').getAttribute('aria-checked'),'false');assert.equal(await act('toggleShelfHaptics').getAttribute('aria-checked'),'false');assert.equal(await act('toggleThemeRipple').count(),0);note('motion and haptic choices survive restarting the interface without restoring the removed theme option');
- await chooseTab('settings');assert.equal(await page.locator('.feature-entry').count(),4);assert.equal(await page.locator('.settings-group').count(),0);await act('aboutApp').click();assert.match(await page.getByRole('dialog',{name:'关于拷贝漫画'}).innerText(),/1\.13\.1/);assert.match(await page.locator('.about-repository').innerText(),/JupiterLXV\/CopyReader/);await act('closeModal').click();note('settings presents four focused entries and an accessible About panel');
+ await chooseTab('settings');assert.equal(await page.locator('.feature-entry').count(),4);assert.equal(await page.locator('.settings-group').count(),0);await act('aboutApp').click();assert.match(await page.getByRole('dialog',{name:'关于拷贝漫画'}).innerText(),/1\.13\.2/);assert.match(await page.locator('.about-repository').innerText(),/JupiterLXV\/CopyReader/);await act('closeModal').click();note('settings presents four focused entries and an accessible About panel');
  await openSettings('motion');await act('toggleMotion').click();await page.emulateMedia({reducedMotion:'reduce'});await act('quickTheme').click();await sleep(30);assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('theme-transitioning')),false);assert.equal(await page.evaluate(()=>document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)')),false);note('system reduced-motion suppresses circular reveals and animated page entries');
  for(const width of [320,393,768]){await page.setViewportSize({width,height:width===320?740:width===393?852:1024});await noOverflow();await chooseTab('shelf');await shelfIdle();await page.evaluate(()=>window.scrollTo(0,0));const box=await page.evaluate(()=>({pager:document.querySelector('.gallery-pager').getBoundingClientRect().bottom,nav:document.querySelector('.nav').getBoundingClientRect().top}));assert.ok(box.pager<=box.nav-2,JSON.stringify({width,...box}));await chooseTab('settings');await noOverflow();await openSettings('network');await noOverflow();await page.evaluate(()=>window.AppBack());}note('the curved shelf, pager, settings groups and advanced controls fit narrow phones and tablets');
  await page.setViewportSize({width:393,height:852});await chooseTab('shelf');await shelfIdle();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(root,'checks/polished-shelf-light.png')});
