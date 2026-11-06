@@ -26,7 +26,7 @@ h1,h2,h3,p{margin:0}h1{font-size:20px;font-weight:600}h2{font-size:16px;font-wei
 .sectionhead small{font-size:12px;font-weight:400;margin-left:5px}.textbtn{font-size:12px;color:var(--accent);padding:8px;min-height:36px}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 10px;align-items:start}
 .bookcard{display:block;min-width:0;padding:0;text-align:left}.cover{aspect-ratio:.72;background:#ededed;border-radius:3px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
-.dark .cover{background:#292929}.cover img{width:100%;height:100%;object-fit:cover;display:block;z-index:1}.cover img.failed{visibility:hidden}
+.dark .cover{background:#292929}.cover img{width:100%;height:100%;object-fit:cover;display:block;z-index:1}.cover img.failed,.cover img[data-browse-cover]:not([src]){visibility:hidden}
 .cover-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#b0b0b0}.cover>small{position:absolute;bottom:4px;left:4px;right:4px;color:#fff;font-size:10px;background:#0009;border-radius:2px;padding:1px 4px;z-index:2}
 .bookcard h3{font-size:12px;line-height:1.45;margin-top:6px;min-height:34px;font-weight:400;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .bookcard p{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}.book-date{font-variant-numeric:tabular-nums}

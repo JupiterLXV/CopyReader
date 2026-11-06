@@ -13,13 +13,17 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.*;
@@ -28,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.GZIPInputStream;
 
 /** All code is local. No third-party scripts, SDKs or remote HTML enter this WebView. */
@@ -41,6 +46,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ExecutorService accountIo = Executors.newSingleThreadExecutor();
     private final Semaphore images = new Semaphore(3);
+    private final AtomicInteger imageWrites = new AtomicInteger();
     private final List<String> discovered = new CopyOnWriteArrayList<>();
     private WebView web;
     private SharedPreferences prefs;
@@ -83,8 +89,10 @@ public final class MainActivity extends Activity {
         if (android.os.Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             int top = insets.getSystemWindowInsetTop(), bottom = insets.getSystemWindowInsetBottom();
-            FrameLayout.LayoutParams content=(FrameLayout.LayoutParams)web.getLayoutParams();
-            content.setMargins(insets.getSystemWindowInsetLeft(),top,insets.getSystemWindowInsetRight(),bottom);web.setLayoutParams(content);
+            if (web != null) {
+                FrameLayout.LayoutParams content=(FrameLayout.LayoutParams)web.getLayoutParams();
+                content.setMargins(insets.getSystemWindowInsetLeft(),top,insets.getSystemWindowInsetRight(),bottom);web.setLayoutParams(content);
+            }
             FrameLayout.LayoutParams status=(FrameLayout.LayoutParams)statusBarFill.getLayoutParams();status.height=top;statusBarFill.setLayoutParams(status);
             FrameLayout.LayoutParams navigation=(FrameLayout.LayoutParams)navigationBarFill.getLayoutParams();navigation.height=bottom;navigationBarFill.setLayoutParams(navigation);
             return insets;
@@ -115,7 +123,7 @@ public final class MainActivity extends Activity {
                 if (!"appassets.androidplatform.net".equals(u.getHost()) || !"https".equals(u.getScheme())) return empty(403);
                 String path=u.getPath();
                 try {
-                    if ("/image".equals(path)) return loadImage(u.getQueryParameter("url"));
+                    if ("/image".equals(path)) return loadImage(u.getQueryParameter("url"), "1".equals(u.getQueryParameter("thumb")));
                     if ("/avatar-preview".equals(path) && !req.isForMainFrame() && "GET".equals(req.getMethod())) {
                         AvatarDraft draft = avatarDraft;
                         if (draft == null || !draft.id.equals(u.getQueryParameter("id"))) return empty(404);
@@ -130,12 +138,50 @@ public final class MainActivity extends Activity {
                 return empty(404);
             }
             @Override public void onPageFinished(WebView view, String url) {
-                applyChrome(prefs.getBoolean("dark",false),false);
+                if (view == web && !destroyed) applyChrome(prefs.getBoolean("dark", false), reading);
+            }
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (view == web) {
+                    web = null;
+                    reading = false;
+                    root.removeView(view);
+                    view.destroy();
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    if (!destroyed && !isFinishing()) showReload();
+                }
+                return true;
             }
         });
         applyChrome(prefs.getBoolean("dark",false),false);
         web.loadUrl(ORIGIN+"/assets/index.html");
-        io.execute(() -> { pruneImages(); discoverHosts(); });
+        submit(io, () -> { pruneImages(); discoverHosts(); });
+    }
+
+    private void showReload() {
+        boolean dark = prefs.getBoolean("dark", false);
+        applyChrome(dark, false);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER);
+        TextView message = new TextView(this);
+        message.setText("阅读界面需要重新载入");
+        message.setTextSize(17);
+        message.setTextColor(dark ? Color.WHITE : Color.rgb(30, 30, 30));
+        panel.addView(message);
+        Button reload = new Button(this);
+        reload.setText("重新载入");
+        reload.setOnClickListener(v -> {
+            reload.setEnabled(false);
+            recreate();
+        });
+        panel.addView(reload);
+        root.addView(panel, 0, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void submit(ExecutorService executor, Runnable task) {
+        if (destroyed) return;
+        try { executor.execute(task); }
+        catch (RejectedExecutionException ignored) { /* Activity shutdown raced with a pending callback. */ }
     }
 
     private Map<String,String> headers() {
@@ -176,7 +222,9 @@ public final class MainActivity extends Activity {
             c.setRequestProperty("Accept",image?"image/avif,image/webp,image/*,*/*;q=0.8":"application/json");
             if(image) c.setRequestProperty("Referer","https://www.manga2026.xyz/");
             else {c.setRequestProperty("platform","3");c.setRequestProperty("version","2024.4.28");c.setRequestProperty("source","com.manga2020.app");c.setRequestProperty("region","1");c.setRequestProperty("webp","1");}
-            int code=c.getResponseCode();
+            int code;
+            try { code = c.getResponseCode(); }
+            catch (IOException e) { c.disconnect(); throw e; }
             if(code>=300 && code<400){String next=c.getHeaderField("Location");c.disconnect();if(next==null)throw new IOException("无效重定向");target=safeHttps(new URL(new URL(target),next).toString());continue;}
             if(code!=200){c.disconnect();throw new IOException("服务器返回 HTTP "+code);} return c;
         }
@@ -395,32 +443,41 @@ public final class MainActivity extends Activity {
             default:throw new IOException("不支持的操作");
         }
     }
-    private WebResourceResponse loadImage(String address) {
+    private WebResourceResponse loadImage(String address, boolean thumbnail) {
         boolean acquired=false;
         try {
-            safeHttps(address);File f=new File(imageDir,hash(address)+".img");
-            if(!f.exists()) {
+            safeHttps(address);
+            String key = hash(address);
+            File original = new File(imageDir, key + ".img");
+            File file = thumbnail ? new File(imageDir, key + "-cover.img") : original;
+            if (!file.isFile()) {
                 images.acquire();acquired=true;
-                if(!f.exists()){
-                    HttpURLConnection c=connect(address,true);
-                    try {
-                        String type=c.getContentType();if(type!=null && !type.startsWith("image/") && !type.contains("octet-stream"))throw new IOException("图片响应无效");
-                        byte[] data=readBytes(c.getInputStream(),20*1024*1024);
-                        if(data.length<12)throw new IOException("图片为空");
-                        writeFile(f,data);
-                    } finally {c.disconnect();}
+                if (!file.isFile()) {
+                    if (!original.isFile()) {
+                        HttpURLConnection c = connect(address, true);
+                        try {
+                            String type = c.getContentType();
+                            if (type != null && !type.startsWith("image/") && !type.contains("octet-stream")) throw new IOException("图片响应无效");
+                            ImageCache.write(original, c.getInputStream());
+                        } finally { c.disconnect(); }
+                    }
+                    if (thumbnail && !CoverThumbnail.write(original, file)) file = original;
+                    if (imageWrites.incrementAndGet() % 12 == 0) submit(io, this::pruneImages);
                 }
             }
-            f.setLastModified(System.currentTimeMillis());
-            FileInputStream stream=new FileInputStream(f);byte[] head=new byte[12];stream.read(head);stream.close();
+            file.setLastModified(System.currentTimeMillis());
+            byte[] head=new byte[12];
+            try (DataInputStream stream = new DataInputStream(new FileInputStream(file))) { stream.readFully(head); }
             String mime=head[0]==(byte)0x89?"image/png":head[0]==(byte)0xff?"image/jpeg":head[0]=='G'?"image/gif":head[8]=='W'?"image/webp":"image/avif";
             Map<String,String> h=new HashMap<>();h.put("Cache-Control","public, max-age=86400");h.put("X-Content-Type-Options","nosniff");
-            if(imageDir.list()!=null && imageDir.list().length%30==0)io.execute(() -> pruneImages());
-            return new WebResourceResponse(mime,null,200,"OK",h,new FileInputStream(f));
+            return new WebResourceResponse(mime,null,200,"OK",h,new FileInputStream(file));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return empty(502);
         } catch(Exception e) {return empty(502);} finally {if(acquired)images.release();}
     }
     private synchronized void pruneImages() {
-        File[] files=imageDir.listFiles();if(files==null)return;
+        File[] files=imageDir.listFiles((dir, name) -> name.endsWith(".img"));if(files==null)return;
         Arrays.sort(files,Comparator.comparingLong(File::lastModified));long total=0;for(File f:files)total+=f.length();
         for(File f:files){if(total<=120L*1024*1024)break;long size=f.length();if(f.delete())total-=size;}
     }
@@ -465,7 +522,7 @@ public final class MainActivity extends Activity {
             avatarResult(id, new JSONObject(), null);
             return;
         }
-        io.execute(() -> {
+        submit(io, () -> {
             JSONObject selected = null;
             String error = null;
             try {
@@ -508,7 +565,7 @@ public final class MainActivity extends Activity {
     public final class Bridge {
         @JavascriptInterface public void haptic(){runOnUiThread(() -> {
             long now=android.os.SystemClock.uptimeMillis();
-            if(destroyed||reading||!web.hasWindowFocus()||now-lastShelfHaptic<45)return;
+            if(destroyed||reading||web==null||!web.hasWindowFocus()||now-lastShelfHaptic<45)return;
             lastShelfHaptic=now;
             web.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         });}
@@ -527,7 +584,7 @@ public final class MainActivity extends Activity {
             }
             boolean accountOperation = Arrays.asList("login", "logout", "account", "postComment", "profile", "saveProfile").contains(method);
             ExecutorService executor = accountOperation ? accountIo : io;
-            executor.execute(() -> {
+            submit(executor, () -> {
                 JSONObject result = new JSONObject();
                 try {
                     result.put("ok", true).put("data", perform(method, new JSONObject(args)));
@@ -552,7 +609,7 @@ public final class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void discardAvatar(String id) { MainActivity.this.discardAvatar(id); }
-        @JavascriptInterface public void chrome(boolean dark,boolean active,boolean useVolume){reading=active;volume=useVolume;prefs.edit().putBoolean("dark",dark).apply();runOnUiThread(() -> {applyChrome(dark,active);if(active)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);});}
+        @JavascriptInterface public void chrome(boolean dark,boolean active,boolean useVolume){runOnUiThread(() -> {if(destroyed||web==null)return;reading=active;volume=useVolume;prefs.edit().putBoolean("dark",dark).apply();applyChrome(dark,active);if(active)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);});}
         @JavascriptInterface public void exportData(String data){
             if(data==null||data.length()>3000000)return;exportText=data;
             runOnUiThread(() -> {Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json");i.putExtra(Intent.EXTRA_TITLE,"CopyReader-backup.json");startActivityForResult(i,101);});
@@ -564,15 +621,15 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request,result,data);
         if (request == PICK_AVATAR) { finishAvatarPicker(result, data); return; }
         if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
-        io.execute(() -> {try {
+        submit(io, () -> {try {
             if(request==101){try(OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new IOException();out.write(exportText.getBytes(StandardCharsets.UTF_8));}exportText="";js("window.NativeNotice&&window.NativeNotice('备份已导出')");}
             if(request==102){String value=new String(readBytes(getContentResolver().openInputStream(uri),4000000),StandardCharsets.UTF_8);new JSONObject(value);js("window.onImported&&window.onImported("+JSONObject.quote(value)+")");}
         }catch(Exception e){js("window.NativeNotice&&window.NativeNotice('文件操作失败，请检查文件格式或保存位置')");}});
     }
-    @Override public void onBackPressed(){js("window.AppBack&&window.AppBack()");}
+    @Override public void onBackPressed(){if(web==null)super.onBackPressed();else js("window.AppBack&&window.AppBack()");}
     @Override public boolean onKeyDown(int code,KeyEvent event){if(reading&&volume&&(code==KeyEvent.KEYCODE_VOLUME_UP||code==KeyEvent.KEYCODE_VOLUME_DOWN)){js("window.ReaderStep&&window.ReaderStep("+(code==KeyEvent.KEYCODE_VOLUME_DOWN?1:-1)+")");return true;}return super.onKeyDown(code,event);}
     @Override public boolean onKeyUp(int code,KeyEvent event){if(reading&&volume&&(code==KeyEvent.KEYCODE_VOLUME_UP||code==KeyEvent.KEYCODE_VOLUME_DOWN))return true;return super.onKeyUp(code,event);}
     @Override protected void onPause(){js("window.persistReading&&window.persistReading()");super.onPause();if(web!=null)web.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
-    @Override protected void onDestroy(){destroyed=true;io.shutdownNow();accountIo.shutdownNow();if(web!=null){web.removeJavascriptInterface("ReaderNative");root.removeView(web);web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){destroyed=true;io.shutdownNow();accountIo.shutdownNow();WebView current=web;web=null;if(current!=null){current.removeJavascriptInterface("ReaderNative");root.removeView(current);current.destroy();}super.onDestroy();}
 }

@@ -1,6 +1,6 @@
 # 拷贝漫画 CopyReader
 
-一个供个人使用的 Android 第三方漫画阅读客户端，版本 1.13.2。显示名称为“拷贝漫画”，独立安装，不覆盖原版客户端。使用相同私有签名的个人安装包可覆盖更新；自行编译的签名由构建者管理。
+一个供个人使用的 Android 第三方漫画阅读客户端，版本 1.13.3。显示名称为“拷贝漫画”，独立安装，不覆盖原版客户端。使用相同私有签名的个人安装包可覆盖更新；自行编译的签名由构建者管理。
 
 ## 1.13.2 改善条漫阅读
 
@@ -240,7 +240,7 @@ export ANDROID_SDK_ROOT=/你的/Android/Sdk
 bash build.sh
 ```
 
-输出为 `dist/CopyReader-1.13.2.apk`。流程为 Java 编译、aapt2 资源打包、D8、zipalign、apksigner。若没有 javac，脚本会从 Maven Central 下载 Eclipse ECJ 3.38.0 编译器作为开发工具。ECJ 不包含在源码压缩包中。
+输出为 `dist/CopyReader-1.13.3.apk`。流程为 Java 编译、aapt2 资源打包、D8、zipalign、apksigner。若没有 javac，脚本会从 Maven Central 下载 Eclipse ECJ 3.38.0 编译器作为开发工具。ECJ 不包含在源码压缩包中。
 
 ## 界面测试
 
