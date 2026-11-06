@@ -74,6 +74,30 @@ public final class CommentProtocolTest {
         check(factory.last.getURL().getHost().equals("saved-account.example") && factory.last.getURL().getQuery().equals("platform=1"), "saved origin and protocol");
         pass("comic writes preserve Unicode and form-special characters using the saved account origin");
 
+        CommentProtocol.Post reply = CommentProtocol.preparePost(args("comic", "comic-uuid", 0)
+                .put("replyId", "4321").put("text", text));
+        writer.call(reply.path, "POST", reply.body, "fixture-private-token");
+        form = AccountProtocolTest.form(factory.last);
+        check(form.size() == 3 && form.get("reply_id").equals("4321") && form.get("comment").equals(text), "reply sends target comment ID with its text");
+        factory.response = "{\"code\":200,\"results\":{\"list\":[]}}";
+        protocol.list(args("comic", "comic-uuid", 20).put("replyId", "4321"));
+        check(factory.last.getURL().getQuery().endsWith("&reply_id=4321&_update=true"), "thread reads use the source's reply query");
+        check(factory.last.getRequestProperty("Authorization") == null, "thread read remains anonymous");
+        pass("comic reply writes and thread reads use reply_id with their respective authentication");
+
+        before = factory.count;
+        for (String invalid : new String[]{"", "0", "1&reply_id=2", "-42"}) {
+            JSONObject bad = args("comic", "comic-uuid", 0).put("replyId", invalid).put("text", text);
+            try { CommentProtocol.preparePost(bad); throw new AssertionError("bad reply write accepted"); }
+            catch (IOException expected) { }
+            try { protocol.list(bad); throw new AssertionError("bad thread read accepted"); }
+            catch (IOException expected) { }
+        }
+        try { CommentProtocol.preparePost(args("chapter", "chapter-uuid", 0).put("replyId", "12").put("text", text)); throw new AssertionError("chapter reply accepted"); }
+        catch (IOException expected) { }
+        check(factory.count == before, "unsupported replies never reach the network");
+        pass("invalid reply IDs and chapter replies are rejected before transport");
+
         CommentProtocol.Post chapterPost = CommentProtocol.preparePost(args("chapter", "chapter-uuid", 0).put("text", text));
         writer.call(chapterPost.path, "POST", chapterPost.body, "fixture-private-token");
         form = AccountProtocolTest.form(factory.last);

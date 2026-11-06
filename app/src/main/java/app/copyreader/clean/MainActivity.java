@@ -36,6 +36,7 @@ public final class MainActivity extends Activity {
     private static final String UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
     private static final String DEFAULT_API = "https://api.2024manga.com";
     private static final String DEFAULT_ACCOUNT_API = "https://api.copy202601.com";
+    private static final int PICK_AVATAR = 103;
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ExecutorService accountIo = Executors.newSingleThreadExecutor();
     private final Semaphore images = new Semaphore(3);
@@ -47,9 +48,22 @@ public final class MainActivity extends Activity {
     private File imageDir, apiDir;
     private volatile boolean reading, volume = true, destroyed;
     private volatile String exportText = "";
+    private volatile AvatarDraft avatarDraft;
+    private String avatarPickerId, avatarPickerToken;
     private long lastShelfHaptic;
     private FrameLayout root;
     private View statusBarFill, navigationBarFill;
+
+    private static final class AvatarDraft {
+        final String id = UUID.randomUUID().toString();
+        final String ownerToken;
+        final byte[] jpeg;
+
+        AvatarDraft(String ownerToken, byte[] jpeg) {
+            this.ownerToken = ownerToken;
+            this.jpeg = jpeg;
+        }
+    }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -101,6 +115,11 @@ public final class MainActivity extends Activity {
                 String path=u.getPath();
                 try {
                     if ("/image".equals(path)) return loadImage(u.getQueryParameter("url"));
+                    if ("/avatar-preview".equals(path) && !req.isForMainFrame() && "GET".equals(req.getMethod())) {
+                        AvatarDraft draft = avatarDraft;
+                        if (draft == null || !draft.id.equals(u.getQueryParameter("id"))) return empty(404);
+                        return new WebResourceResponse("image/jpeg", null, 200, "OK", headers(), new ByteArrayInputStream(draft.jpeg));
+                    }
                     if (path != null && path.startsWith("/assets/") && !path.contains("..")) {
                         String name=path.substring(8);
                         String mime=name.endsWith(".css")?"text/css":name.endsWith(".js")?"application/javascript":name.endsWith(".svg")?"image/svg+xml":name.endsWith(".webp")?"image/webp":name.endsWith(".png")?"image/png":"text/html";
@@ -198,7 +217,13 @@ public final class MainActivity extends Activity {
     }
     private String enc(String s) throws Exception {return URLEncoder.encode(s,"UTF-8");}
     private JSONObject safeProfile(JSONObject source) throws Exception {
-        JSONObject p=new JSONObject();for(String key:new String[]{"user_id","username","nickname","avatar"}){String value=source.optString(key,"");if(!value.equals("null"))p.put(key,value.length()>2048?value.substring(0,2048):value);}return p;
+        JSONObject profile = new JSONObject();
+        for (String key : new String[]{"user_id", "username", "nickname", "avatar"}) {
+            if (source.isNull(key)) continue;
+            String value = source.optString(key, "");
+            profile.put(key, value.length() > 2048 ? value.substring(0, 2048) : value);
+        }
+        return profile;
     }
     private JSONObject accountState() throws Exception {
         JSONObject s=vault.read();return s==null?new JSONObject().put("loggedIn",false):new JSONObject().put("loggedIn",true).put("profile",s.getJSONObject("profile")).put("host",s.getString("host"));
@@ -212,8 +237,77 @@ public final class MainActivity extends Activity {
             synchronized(accountLock){JSONObject current=vault.read();if(current==null||!token.equals(current.optString("token")))throw new AccountProtocol.Failure("账号已切换，请重新加载",true);}
             return response;
         }catch(AccountProtocol.Failure e){
-            if(e.expired)synchronized(accountLock){JSONObject current=vault.read();if(current!=null&&token.equals(current.optString("token")))vault.clear();}
+            if(e.expired) clearSession(token);
             throw e;
+        }
+    }
+    private void clearSession(String token) throws Exception {
+        synchronized (accountLock) {
+            JSONObject current = vault.read();
+            if (current != null && token.equals(current.optString("token"))) {
+                vault.clear();
+                avatarDraft = null;
+            }
+        }
+    }
+
+    private JSONObject requireSession() throws Exception {
+        JSONObject session = vault.read();
+        if (session == null) throw new AccountProtocol.Failure("请先登录拷贝漫画账号", true);
+        return session;
+    }
+
+    private ProfileProtocol profileProtocol(JSONObject session) throws Exception {
+        return new ProfileProtocol(new AccountProtocol(session.getString("host"),
+                session.optString("protocol", "legacy").equals("legacy")), session.getString("token"));
+    }
+
+    private JSONObject refreshProfile(JSONObject session, ProfileProtocol protocol) throws Exception {
+        JSONObject incoming = safeProfile(protocol.member());
+        if (incoming.length() == 0) throw new IOException("源站未返回账号资料");
+        synchronized (accountLock) {
+            JSONObject current = requireSession();
+            if (!session.getString("token").equals(current.getString("token"))) {
+                throw new AccountProtocol.Failure("账号已切换，请重新打开资料页", false);
+            }
+            JSONObject profile = current.getJSONObject("profile");
+            boolean changed = false;
+            for (Iterator<String> keys = incoming.keys(); keys.hasNext(); ) {
+                String key = keys.next(), value = incoming.getString(key);
+                if (key.equals("username") && value.isEmpty()) continue;
+                if (value.equals(profile.optString(key))) continue;
+                profile.put(key, value);
+                changed = true;
+            }
+            if (changed) vault.write(current);
+            return accountState();
+        }
+    }
+
+    private JSONObject profileRequest(JSONObject args, boolean save) throws Exception {
+        JSONObject session = requireSession();
+        String token = session.getString("token");
+        ProfileProtocol protocol = profileProtocol(session);
+        try {
+            if (!save) return refreshProfile(session, protocol);
+            String name = ProfileProtocol.requestedNickname(args);
+            String draftId = args.optString("avatarId", "");
+            AvatarDraft draft = avatarDraft;
+            if (!draftId.isEmpty() && (draft == null || !draft.id.equals(draftId) || !token.equals(draft.ownerToken))) {
+                throw new IOException("所选头像已失效，请重新选择");
+            }
+            if (name == null && draftId.isEmpty()) return accountState();
+            protocol.save(name, draftId.isEmpty() ? null : draft.jpeg);
+            if (!draftId.isEmpty()) discardAvatar(draftId);
+            try {
+                return refreshProfile(session, protocol);
+            } catch (Exception refreshFailure) {
+                if (refreshFailure instanceof AccountProtocol.Failure && ((AccountProtocol.Failure) refreshFailure).expired) clearSession(token);
+                return accountState().put("refreshPending", true);
+            }
+        } catch (AccountProtocol.Failure failure) {
+            if (failure.expired) clearSession(token);
+            throw failure;
         }
     }
     private JSONObject accountLogin(JSONObject a) throws Exception {
@@ -223,6 +317,7 @@ public final class MainActivity extends Activity {
             try{data=new AccountProtocol(host,protocol.equals("legacy")).login(username,password);}catch(AccountProtocol.Failure e){throw new AccountProtocol.Failure(e.getMessage(),false,e.status);}
             JSONObject profile=safeProfile(data);if(profile.optString("username").isEmpty())profile.put("username",username);
             vault.write(new JSONObject().put("token",data.getString("token")).put("host",host).put("profile",profile).put("protocol",protocol));
+            avatarDraft = null;
             return accountState();
         }
     }
@@ -237,8 +332,10 @@ public final class MainActivity extends Activity {
             case "comments":return new CommentProtocol(prefs.getString("account_api",DEFAULT_ACCOUNT_API),prefs.getString("account_protocol","modern").equals("legacy")).list(a);
             case "postComment":CommentProtocol.Post post;try{post=CommentProtocol.preparePost(a);}catch(IOException e){throw new AccountProtocol.Failure(e.getMessage(),false,400);}return signed(post.path,"POST",post.body);
             case "account":return accountState();
+            case "profile":return profileRequest(a, false);
+            case "saveProfile":return profileRequest(a, true);
             case "login":return accountLogin(a);
-            case "logout":synchronized(accountLock){vault.clear();}return new JSONObject().put("loggedIn",false);
+            case "logout":synchronized(accountLock){vault.clear();avatarDraft=null;}return new JSONObject().put("loggedIn",false);
             case "cloudShelf":return signed("/api/v3/member/collect/comics?limit=30&offset="+offset+"&free_type=1&ordering=-datetime_updated&platform=3","GET",null);
             case "cloudStatus":return signed("/api/v3/comic2/"+word(a,"comic")+"/query?platform=3","GET",null);
             case "cloudAdd":return signed("/api/v3/member/collect/comic?platform=3","POST","comic_id="+enc(word(a,"comicId"))+"&is_collect=1");
@@ -246,8 +343,20 @@ public final class MainActivity extends Activity {
             case "list":
                 String mode=a.optString("mode","latest"),theme=a.optString("theme","");
                 path="/api/v3/comics?limit=24&offset="+offset+"&ordering="+(mode.equals("popular")?"-popular":"-datetime_updated")+"&platform=3";
-                if(!theme.isEmpty())path+="&theme="+enc(theme);return api(path,a.optBoolean("refresh"));
-            case "search":return api("/api/v3/search/comic?limit=24&offset="+offset+"&q="+enc(a.optString("q",""))+"&q_type=&platform=3",a.optBoolean("refresh"));
+                if (!theme.isEmpty()) path += "&theme=" + enc(word(a, "theme"));
+                if (!a.optString("author", "").isEmpty()) path += "&author=" + enc(word(a, "author"));
+                return api(path, a.optBoolean("refresh"));
+            case "search":
+                String searchType = a.optString("type").equals("author") ? "author" : "";
+                return api("/api/v3/search/comic?limit=24&offset=" + offset + "&q=" + enc(a.optString("q", ""))
+                        + "&q_type=" + searchType + "&platform=3", a.optBoolean("refresh"));
+            case "themes":
+                try {
+                    JSONObject data = api("/api/v3/h5/filter/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
+                    JSONObject result = data.optJSONObject("results");
+                    if (result != null && (result.optJSONArray("theme") != null || result.optJSONArray("themes") != null)) return data;
+                } catch (Exception ignored) { /* Older lines use filterIndex. */ }
+                return api("/api/v3/h5/filterIndex/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
             case "detail":return signedOrPublic("/api/v3/comic2/"+word(a,"comic")+"?platform=3",a.optBoolean("refresh"));
             case "chapters":return api("/api/v3/comic/"+word(a,"comic")+"/group/"+word(a,"group")+"/chapters?limit=100&offset="+offset+"&platform=3",a.optBoolean("refresh"));
             case "chapter":
@@ -292,6 +401,77 @@ public final class MainActivity extends Activity {
         for(File f:files){if(total<=120L*1024*1024)break;long size=f.length();if(f.delete())total-=size;}
     }
     private void js(String code){runOnUiThread(() -> {if(!destroyed && web!=null)web.evaluateJavascript(code,null);});}
+
+    private void nativeResult(String id, JSONObject data) {
+        js("window.NativeResult&&window.NativeResult(" + JSONObject.quote(id) + "," + data + ")");
+    }
+
+    private void avatarResult(String id, JSONObject data, String error) {
+        try {
+            JSONObject result = new JSONObject().put("ok", error == null);
+            if (error == null) result.put("data", data); else result.put("error", error);
+            nativeResult(id, result);
+        } catch (Exception ignored) { }
+    }
+
+    private void openAvatarPicker(String id) {
+        if (avatarPickerId != null) {
+            avatarResult(id, null, "正在选择头像，请稍候");
+            return;
+        }
+        try {
+            avatarPickerToken = requireSession().getString("token");
+            avatarPickerId = id;
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("image/*");
+            startActivityForResult(intent, PICK_AVATAR);
+        } catch (Exception error) {
+            avatarPickerId = avatarPickerToken = null;
+            avatarResult(id, null, "无法打开图片选择，请确认登录状态");
+        }
+    }
+
+    private void finishAvatarPicker(int result, Intent data) {
+        String id = avatarPickerId, token = avatarPickerToken;
+        if (id == null) return;
+        Uri uri = data == null ? null : data.getData();
+        if (result != RESULT_OK || uri == null) {
+            avatarPickerId = avatarPickerToken = null;
+            avatarResult(id, new JSONObject(), null);
+            return;
+        }
+        io.execute(() -> {
+            JSONObject selected = null;
+            String error = null;
+            try {
+                InputStream source = getContentResolver().openInputStream(uri);
+                if (source == null) throw new IOException("无法读取图片");
+                byte[] jpeg = AvatarImage.jpeg(readBytes(source, 16 * 1024 * 1024));
+                synchronized (accountLock) {
+                    if (!token.equals(requireSession().getString("token"))) throw new IOException("账号已切换，请重新选择");
+                    AvatarDraft draft = new AvatarDraft(token, jpeg);
+                    avatarDraft = draft;
+                    selected = new JSONObject().put("id", draft.id);
+                }
+            } catch (Exception failure) {
+                error = "无法读取头像，请选择不超过16 MB的图片";
+            }
+            JSONObject response = selected;
+            String message = error;
+            runOnUiThread(() -> {
+                avatarPickerId = avatarPickerToken = null;
+                avatarResult(id, response, message);
+            });
+        });
+    }
+
+    private void discardAvatar(String id) {
+        synchronized (accountLock) {
+            AvatarDraft draft = avatarDraft;
+            if (draft != null && draft.id.equals(id)) avatarDraft = null;
+        }
+    }
     private void applyChrome(boolean dark, boolean reader) {
         int background=reader?Color.rgb(20,20,20):dark?Color.rgb(25,25,25):Color.rgb(247,246,242);
         int status=background;
@@ -317,9 +497,37 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public String setApi(String value){try{String u=safeHttps(value.trim());URL v=new URL(u);if((!"".equals(v.getPath())&&!"/".equals(v.getPath()))||v.getQuery()!=null||v.getRef()!=null)return "只填写域名，不包含路径或参数";prefs.edit().putString("api",u.replaceAll("/+$","")).apply();return "";}catch(Exception e){return "请填写有效的 HTTPS 域名";}}
         @JavascriptInterface public void call(String id,String method,String args){
             if(id==null||!id.matches("[0-9]{1,12}"))return;
-            ExecutorService executor=(method.equals("login")||method.equals("logout")||method.equals("account")||method.equals("postComment"))?accountIo:io;
-            executor.execute(() -> {JSONObject result=new JSONObject();try{result.put("ok",true);result.put("data",perform(method,new JSONObject(args)));}catch(Exception e){try{String msg=e.getMessage();if(method.equals("postComment")&&e instanceof IOException&&!(e instanceof AccountProtocol.Failure)){msg="发送结果未确认，请先刷新评论检查后再决定是否重发";result.put("code","COMMENT_UNCONFIRMED");}else{if(e instanceof SocketTimeoutException)msg="连接超时，请重试或切换线路";if(e instanceof UnknownHostException)msg="无法解析数据源，请检查网络或更换线路";}if(e instanceof AccountProtocol.Failure&&((AccountProtocol.Failure)e).expired)result.put("code","AUTH_EXPIRED");result.put("ok",false).put("error",msg==null?"网络请求失败，请稍后重试":msg);}catch(Exception ignored){}}js("window.NativeResult&&window.NativeResult("+JSONObject.quote(id)+","+result+")");});
+            if (method.equals("chooseAvatar")) {
+                runOnUiThread(() -> openAvatarPicker(id));
+                return;
+            }
+            boolean accountOperation = Arrays.asList("login", "logout", "account", "postComment", "profile", "saveProfile").contains(method);
+            ExecutorService executor = accountOperation ? accountIo : io;
+            executor.execute(() -> {
+                JSONObject result = new JSONObject();
+                try {
+                    result.put("ok", true).put("data", perform(method, new JSONObject(args)));
+                } catch (Exception error) {
+                    try {
+                        String message = error.getMessage();
+                        if (method.equals("postComment") && error instanceof IOException && !(error instanceof AccountProtocol.Failure)) {
+                            message = "发送结果未确认，请先刷新评论检查后再决定是否重发";
+                            result.put("code", "COMMENT_UNCONFIRMED");
+                        } else if (error instanceof ProfileProtocol.Unconfirmed) {
+                            result.put("code", "PROFILE_UNCONFIRMED");
+                        } else if (error instanceof SocketTimeoutException) {
+                            message = "连接超时，请重试或切换线路";
+                        } else if (error instanceof UnknownHostException) {
+                            message = "无法解析数据源，请检查网络或更换线路";
+                        }
+                        if (error instanceof AccountProtocol.Failure && ((AccountProtocol.Failure) error).expired) result.put("code", "AUTH_EXPIRED");
+                        result.put("ok", false).put("error", message == null ? "网络请求失败，请稍后重试" : message);
+                    } catch (Exception ignored) { }
+                }
+                nativeResult(id, result);
+            });
         }
+        @JavascriptInterface public void discardAvatar(String id) { MainActivity.this.discardAvatar(id); }
         @JavascriptInterface public void chrome(boolean dark,boolean active,boolean useVolume){reading=active;volume=useVolume;prefs.edit().putBoolean("dark",dark).apply();runOnUiThread(() -> {applyChrome(dark,active);if(active)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);});}
         @JavascriptInterface public void exportData(String data){
             if(data==null||data.length()>3000000)return;exportText=data;
@@ -329,7 +537,9 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void exit(){runOnUiThread(() -> finish());}
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
-        super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
+        super.onActivityResult(request,result,data);
+        if (request == PICK_AVATAR) { finishAvatarPicker(result, data); return; }
+        if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
         io.execute(() -> {try {
             if(request==101){try(OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new IOException();out.write(exportText.getBytes(StandardCharsets.UTF_8));}exportText="";js("window.NativeNotice&&window.NativeNotice('备份已导出')");}
             if(request==102){String value=new String(readBytes(getContentResolver().openInputStream(uri),4000000),StandardCharsets.UTF_8);new JSONObject(value);js("window.onImported&&window.onImported("+JSONObject.quote(value)+")");}

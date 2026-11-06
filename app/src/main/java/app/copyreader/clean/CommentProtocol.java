@@ -17,6 +17,16 @@ final class CommentProtocol {
 
     CommentProtocol(AccountProtocol transport) { this.transport = transport; }
 
+    private static String replyId(JSONObject args, String scope) throws IOException {
+        if (!args.has("replyId")) return "";
+        Object value = args.opt("replyId");
+        if (!scope.equals("comic") || !(value instanceof String)
+                || !((String) value).matches("[1-9][0-9]{0,19}")) {
+            throw new IOException("无效的回复对象");
+        }
+        return (String) value;
+    }
+
     static Post preparePost(JSONObject args) throws Exception {
         String scope = args.optString("scope");
         if (!scope.equals("comic") && !scope.equals("chapter")) throw new IOException("无效的评论类型");
@@ -31,6 +41,8 @@ final class CommentProtocol {
         String path = chapter ? "/api/v3/member/roast?platform=3" : "/api/v3/member/comment?platform=3";
         String body = (chapter ? "chapter_id=" : "comic_id=") + AccountProtocol.enc(target)
                 + (chapter ? "&roast=" : "&comment=") + AccountProtocol.enc(text);
+        String reply = replyId(args, scope);
+        if (!reply.isEmpty()) body += "&reply_id=" + reply;
         return new Post(path, body);
     }
 
@@ -42,6 +54,8 @@ final class CommentProtocol {
         long offset = Math.max(0, Math.min(1000000, args.optLong("offset", 0)));
         String path = scope.equals("comic") ? "/api/v3/comments?comic_id=" : "/api/v3/roasts?chapter_id=";
         path += target + "&limit=20&offset=" + offset + "&platform=3";
+        String reply = replyId(args, scope);
+        if (!reply.isEmpty()) path += "&reply_id=" + reply + "&_update=true";
         JSONObject data;
         try {
             data = transport.call(path, "GET", null, null);

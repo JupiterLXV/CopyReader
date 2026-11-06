@@ -46,6 +46,12 @@ final class AccountProtocol {
         return data;
     }
     JSONObject call(String path,String method,String body,String token) throws Exception {
+        if (body != null && token != null && legacy) body += "&authorization=" + enc("Token " + token);
+        byte[] bytes = body == null ? null : body.getBytes(StandardCharsets.UTF_8);
+        return call(path, method, bytes, "application/x-www-form-urlencoded;charset=utf-8", token);
+    }
+
+    JSONObject call(String path,String method,byte[] body,String contentType,String token) throws Exception {
         if(!path.startsWith("/api/v3/")||path.contains("#")||path.contains("\r")||path.contains("\n"))throw new IOException("无效的账号请求");
         if(token!=null&&(token.isEmpty()||token.length()>8192||token.contains("\r")||token.contains("\n")))throw new Failure("登录凭证格式无效，请重新登录",true);
         if(!legacy)path=path.replaceAll("([?&])platform=3(?=&|$)","$1platform=1");
@@ -57,7 +63,12 @@ final class AccountProtocol {
             c.setRequestProperty("User-Agent",legacy?"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/141.0.0.0 Mobile Safari/537.36":"COPY/3.0.0");
             c.setRequestProperty("Accept","application/json");c.setRequestProperty("platform",legacy?"3":"1");c.setRequestProperty("version",legacy?"2024.4.28":"2025.08.15");if(legacy)c.setRequestProperty("source","com.manga2020.app");c.setRequestProperty("region","1");c.setRequestProperty("webp","1");
             if(token!=null)c.setRequestProperty("Authorization","Token "+token);
-            if(body!=null){if(token!=null&&legacy)body+="&authorization="+enc("Token "+token);byte[] bytes=body.getBytes(StandardCharsets.UTF_8);c.setRequestProperty("Content-Type","application/x-www-form-urlencoded;charset=utf-8");c.setDoOutput(true);c.setFixedLengthStreamingMode(bytes.length);try(OutputStream out=c.getOutputStream()){out.write(bytes);}}
+            if (body != null) {
+                c.setRequestProperty("Content-Type", contentType);
+                c.setDoOutput(true);
+                c.setFixedLengthStreamingMode(body.length);
+                try (OutputStream out = c.getOutputStream()) { out.write(body); }
+            }
             int status=c.getResponseCode();
             if(status>=300&&status<400)throw new Failure("账号线路发生跳转，请检查接口地址后重新登录",false,status);
             InputStream stream=status>=400?c.getErrorStream():c.getInputStream();

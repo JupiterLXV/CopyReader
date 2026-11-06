@@ -38,6 +38,6 @@ if [[ ! -f signing/debug.keystore ]]; then
   keytool -genkeypair -keystore signing/debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=CopyReader Personal Build,O=Personal,C=CN' -noprompt
 fi
 "$BT/zipalign" -f -p 4 build/unsigned.apk build/aligned.apk
-bash "$BT/apksigner" sign --ks signing/debug.keystore --ks-pass pass:android --key-pass pass:android --out dist/CopyReader-1.12.1.apk build/aligned.apk
-bash "$BT/apksigner" verify --verbose dist/CopyReader-1.12.1.apk
-echo 'Built dist/CopyReader-1.12.1.apk'
+bash "$BT/apksigner" sign --ks signing/debug.keystore --ks-pass pass:android --key-pass pass:android --out dist/CopyReader-1.13.0.apk build/aligned.apk
+bash "$BT/apksigner" verify --verbose dist/CopyReader-1.13.0.apk
+echo 'Built dist/CopyReader-1.13.0.apk'

@@ -1,3 +1,15 @@
+# CopyReader 1.13.0 验证记录
+
+基线为 GitHub main `65650ff7d6d039919c0cb3b600d586d68ffef442`。
+
+- 题材目录支持新版与旧版读取路径，内置 72 项备用标签。验证“节操”、目录新增标签和详情第七个以后的标签均可访问。作者和题材作品页使用源站标识请求，分页与返回保留列表位置和详情筛选。[题材目录参考](https://github.com/rchdliang/CopyManga_Neo/blob/85cdac74ad18e72b3a5f2eb2cf67f9654822e666/shared/src/commonMain/kotlin/com/rchdliang/copymanga_neo/domain/model/ComicFilterDefaults.kt)
+- 作品回复表单和回复串查询使用 `reply_id`。验证登录恢复、两条评论草稿隔离、明确失败保留文本、回复串内回复和按原评论刷新。[回复接口参考](https://github.com/venera-app/venera-configs/blob/a04e05591f7832f7166d6660546613c114d6738a/copy_manga.js#L856)
+- 资料读取使用 `/api/v3/member/info`。保存先读取源站资料，图片按正方形预览并上传，再提交昵称和头像路径。头像由 Android 系统选择器读取，规范为最长边 512 像素的 JPEG。确认保存后从同一登录线路刷新资料。[资料接口参考](https://github.com/rchdliang/CopyManga_Neo/blob/85cdac74ad18e72b3a5f2eb2cf67f9654822e666/shared/src/commonMain/kotlin/com/rchdliang/copymanga_neo/data/repository/portable/PortableUserRepository.kt#L194)
+- 163 项浏览器完整回归、5 项新增界面流程、44 项 Java 协议检查和 174 项动效与几何检查通过。检查了 320px 宽度下的账号卡片和编辑弹层。评论与资料写入使用模拟接口验证，真账号和 Android 真机安装未实测。
+- Android SDK 35 构建，版本码 19。v2/v3 签名、zipalign、与 1.12.1 同证书和 16 个 APK 资产一致性检查通过。APK SHA-256 `b07bdcd5bb268a1c5a82639dc1ec217d426eea9c15d61a06fe8ae512c4b879c8`。
+
+---
+
 # CopyReader 1.12.1 验证记录
 
 基线：GitHub main `3855ef39496df86d879b885ce091555715b18178`。本次处理用户反馈的“转场画面停顿与跳变”；此前的时长和最终状态检查没有覆盖这些中间画面问题。

@@ -8,6 +8,11 @@ const origin='https://appassets.androidplatform.net';
 const chapterId='11111111-1111-1111-1111-111111111111';
 const nextId='22222222-2222-2222-2222-222222222222';
 const book={metadata_checked_at:Date.now(),uuid:'aaaaaaaa-1111-1111-1111-111111111111',name:'测试作品 · 远方的故事',path_word:'testcomic',cover:'https://fixture.example/cover.png',author:[{name:'测试作者'}],datetime_updated:'2026-11-01',brief:'这是一份离线界面验证数据。它只出现在测试中，不会打包到应用。',status:{display:'连载中'},region:{display:'日本'},theme:[{name:'奇幻'}]};
+const featureBook={...book,path_word:'featurecomic',name:'题材与作者测试作品',author:[{name:'有标识的作者',path_word:'fixture-author'},{name:'仅名称的作者'}],theme:[
+ {name:'百合',path_word:'baihe'},{name:'奇幻',path_word:'qihuan'},{name:'校园',path_word:'xiaoyuan'},
+ {name:'治愈',path_word:'zhiyu'},{name:'生活',path_word:'shenghuo'},{name:'搞笑',path_word:'gaoxiao'},
+ {name:'节操',path_word:'jiecao'},{name:'新测试题材',path_word:'fixture-new-theme'},
+]};
 const chapters=[{uuid:chapterId,name:'第01话',index:0},{uuid:nextId,name:'第02话',index:1},{uuid:'33333333-3333-3333-3333-333333333333',name:'第03话',index:2}];
 const ok=results=>({code:200,results});
 const calls=[],results=[],errors=[],imageRequests=[];
@@ -18,6 +23,8 @@ const longChapters=Array.from({length:260},(_,i)=>({uuid:'long-'+i,name:'第'+St
 let fixtureAccount=null,expireNextCloud=false;
 let commentMode='normal',slowComicComments=false;
 let postMode='ok';
+let profileMode='ok',avatarMode='ok';
+const avatarId='99999999-aaaa-bbbb-cccc-123456789abc';
 const postedComments=[];
 const commentText='<img src=x onerror="window.commentInjected=true">\n换行 & 🙂';
 const commentRows=Array.from({length:23},(_,i)=>({id:1000+i,user_name:i?'测试读者 '+i:'<svg onload="window.commentInjected=true">',user_avatar:'https://fixture.example/avatar.png',create_at:'2026-11-01T10:15:00',comment:i?'作品评论 '+i:commentText,parent_user_name:i===1?'另一位读者':null}));
@@ -28,6 +35,17 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function native(method,raw){
  const a=JSON.parse(raw);calls.push({method,args:a});await sleep(15);
  if(method==='account')return fixtureAccount||{loggedIn:false};
+ if(method==='profile')return fixtureAccount?{...fixtureAccount,profile:{...fixtureAccount.profile,avatar:fixtureAccount.profile.avatar||'https://fixture.example/account-avatar.png'}}:{loggedIn:false};
+ if(method==='chooseAvatar')return avatarMode==='cancel'?{}:{id:avatarId};
+ if(method==='saveProfile'){
+  await sleep(80);
+  if(profileMode==='denied')throw Error('源站暂时限制资料修改');
+  if(profileMode==='unconfirmed'){const error=Error('保存结果未确认');error.code='PROFILE_UNCONFIRMED';throw error;}
+  if(a.avatarId){assert.equal(a.avatarId,avatarId);fixtureAccount.profile.avatar='https://fixture.example/account-new-avatar.jpg';}
+  if(a.nickname)fixtureAccount.profile.nickname=a.nickname;
+  return fixtureAccount;
+ }
+ if(method==='themes')return ok({theme:[{name:'节操',path_word:'jiecao'},{name:'新测试题材',path_word:'fixture-new-theme'}]});
  if(method==='login'){await sleep(60);if(a.password!=='fixture-Password+/&=密码')throw Error('账号或密码错误');fixtureAccount={loggedIn:true,profile:{username:a.username,nickname:a.username==='second-reader'?'第二位测试用户':'测试阅读者'},host:'https://api.2024manga.com'};return fixtureAccount;}
  if(method==='logout'){fixtureAccount=null;return {loggedIn:false};}
  if(method==='comments'){
@@ -35,8 +53,13 @@ async function native(method,raw){
   if(a.scope==='comic'&&slowComicComments)await sleep(250);
   if(commentMode==='empty')return ok({list:[],total:0,offset:a.offset});
   if(commentMode==='malformed')return ok({list:null,total:10});
+  if(a.replyId){
+   assert.equal(a.scope,'comic');
+   const replies=postedComments.filter(row=>row.scope===a.scope&&row.target===a.target&&row.rootReplyId===a.replyId);
+   return ok({list:replies.slice(a.offset,a.offset+20),total:replies.length,offset:a.offset});
+  }
   const base=commentRows.map(r=>a.scope==='chapter'?{...r,id:r.id+10000,comment:'本话评论 '+r.id}:r);
-  const all=[...postedComments.filter(r=>r.scope===a.scope&&r.target===a.target),...base];
+  const all=[...postedComments.filter(r=>r.scope===a.scope&&r.target===a.target&&!r.replyId),...base];
   const rows=a.offset===0?all.slice(0,20):[all[19],...all.slice(20)];
   return ok({list:rows,total:all.length+1,limit:20,offset:a.offset});
  }
@@ -45,8 +68,10 @@ async function native(method,raw){
   if(!fixtureAccount||postMode==='expired'){fixtureAccount=null;const error=Error('登录已过期，请重新登录');error.code='AUTH_EXPIRED';throw error;}
   if(postMode==='denied')throw Error('请先在原版验证邮箱');
   if(postMode==='unconfirmed'){const error=Error('发送结果未确认，请先刷新评论检查后再决定是否重发');error.code='COMMENT_UNCONFIRMED';throw error;}
-  assert.ok(a.text.trim());assert.ok(['comic','chapter'].includes(a.scope));assert.equal(Object.keys(a).sort().join(','),'scope,target,text');
-  postedComments.unshift({id:90000+postedComments.length,...a,comment:a.text,user_name:fixtureAccount.profile.nickname,user_avatar:'',create_at:'2026-11-01T20:20:00'});
+  assert.ok(a.text.trim());assert.ok(['comic','chapter'].includes(a.scope));assert.equal(Object.keys(a).sort().join(','),a.replyId?'replyId,scope,target,text':'scope,target,text');
+  const parent=[...postedComments,...commentRows].find(row=>String(row.id)===a.replyId);
+  if(a.replyId){assert.equal(a.scope,'comic');assert.ok(parent);}
+  postedComments.unshift({id:90000+postedComments.length,...a,rootReplyId:parent?.rootReplyId||a.replyId,parent_user_name:parent?.user_name,comment:a.text,user_name:fixtureAccount.profile.nickname,user_avatar:'',create_at:'2026-11-01T20:20:00'});
   return ok({});
  }
  if(method==='cloudShelf'){
@@ -60,16 +85,22 @@ async function native(method,raw){
  if(method==='cloudRemove'){for(const [word,id] of cloudRecords)if(id===a.shelfId)cloudRecords.delete(word);return ok({});}
  if(method==='list'){
   if(failLists)throw Error('模拟离线：连接超时');
+  if(a.author||a.theme==='jiecao'){
+   const books=Array.from({length:26},(_,i)=>i?{...book,path_word:'filtered-'+i,name:`筛选作品 ${i+1}`} : featureBook);
+   return ok({list:books.slice(a.offset,a.offset+24),total:books.length});
+  }
   const items=Array.from({length:26},(_,i)=>({...book,path_word:i?'testcomic'+i:'testcomic',name:i?'离线测试作品 '+(i+1):book.name}));
   return ok({list:items.slice(a.offset,a.offset+24),total:26});
  }
  if(method==='search'){
+  if(a.type==='author')return ok({list:[featureBook],total:1});
   if(a.q==='custom-search')return ok({list:[{...book,path_word:'search-only',name:'自选搜索作品',cover:'https://fixture.example/cover-38.svg'}],total:1});
   if(a.q==='slow')await sleep(250);
   return ok({list:a.q==='missing'?[]:[{...book,name:a.q==='slow'?'不应覆盖的新旧竞态数据':book.name}],total:a.q==='missing'?0:1});
  }
  if(method==='detail'){
   if(detailDelay)await sleep(detailDelay);
+  if(a.comic===featureBook.path_word)return ok({comic:featureBook,groups:{default:{name:'默认',count:4}},is_lock:false});
   if(a.comic==='legacy-completed')return ok({comic:{...book,path_word:a.comic,name:'已完结状态补读测试',author:[],status:{display:'已完结'}},groups:{default:{name:'默认',count:4}},is_lock:false});
   if(a.comic==='longcomic'){if(longMode==='detail-fail')throw Error('模拟作品详情离线');return ok({comic:longBook,groups:longMode==='missing-group'?{default:{name:'默认',count:4}}:{default:{name:'默认',count:4},extras:{name:'番外长篇',count:260}},is_lock:false});}
   return ok({comic:cloudBooks.find(b=>b.path_word===a.comic)||{...book,path_word:a.comic},groups:{default:{name:'默认',count:4},extras:{name:'番外',count:1}},is_lock:false});
@@ -97,7 +128,7 @@ function svg(label,seed=0){
  const context=await browser.newContext({viewport:{width:393,height:852},deviceScaleFactor:1,isMobile:true,hasTouch:true});
  const page=activePage=await context.newPage();
  const stableScreenshot=page.screenshot.bind(page);page.screenshot=async options=>{await page.waitForFunction(()=>document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).every(a=>a.playState!=='running'),null,{timeout:2500}).catch(()=>{});return stableScreenshot(options);};
- page.on('pageerror',e=>errors.push(e.message));
+ page.on('pageerror',e=>{errors.push(e.message);console.error('Page error',e.stack||e.message);});
  await page.exposeFunction('__testNative',async(m,a)=>{try{return {ok:true,data:await native(m,a)};}catch(e){return {ok:false,error:e.message,code:e.code};}});
  await page.addInitScript(()=>{
   window.themeFrameHistory=[];const nativeAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){const a=nativeAnimate.call(this,frames,options);if(options?.pseudoElement==='::view-transition-new(root)')window.themeFrameHistory.push(a.effect.getKeyframes());return a;};
@@ -110,12 +141,13 @@ function svg(label,seed=0){
    setAccountApi(s,mode){if(!/^https:\/\/[a-z0-9.-]+\/?$/.test(s)||!['modern','legacy'].includes(mode))return '无效账号线路';localStorage.setItem('fixture-account-api',s);localStorage.setItem('fixture-account-protocol',mode);return '';},
    setApi(s){if(!/^https:\/\/[a-z0-9.-]+\/?$/.test(s))return '无效 HTTPS 域名';localStorage.setItem('fixture-api',s);return '';},
    haptic(){(window.fixtureHaptics??=[]).push(performance.now());},chrome(dark,active){window.fixtureReading=active;},exit(){window.fixtureExit=true;},
-   exportData(s){window.fixtureExport=s;},importData(){},
+   exportData(s){window.fixtureExport=s;},importData(){},discardAvatar(id){window.fixtureDiscardedAvatar=id;},
    call(id,m,a){window.__testNative(m,a).then(result=>window.NativeResult(id,result));}
   };
  });
  await context.route(origin+'/**',async route=>{
   const u=new URL(route.request().url());
+  if(u.pathname==='/avatar-preview'){await route.fulfill({status:200,contentType:'image/svg+xml',body:svg('AVATAR')});return;}
   if(u.pathname==='/image'){
    imageRequests.push(u.searchParams.get('url'));
    if(slowImages&&/page1\.png\?case=/.test(u.searchParams.get('url')))await sleep(650);
@@ -134,6 +166,11 @@ function svg(label,seed=0){
  const shelfIdle=()=>page.waitForFunction(()=>document.querySelector('.paper-stage')?.dataset.motion==='idle'&&!document.querySelector('[data-motion-scene]'));
  const noOverflow=async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await page.goto(origin+'/assets/index.html');
+ if(process.env.ACCOUNT_FEATURES_ONLY){
+  await require('./account-catalog.cjs')({page,root,act,calls,note,chooseTab,noOverflow,avatarId,
+   setPostMode:value=>postMode=value,setProfileMode:value=>profileMode=value,setAvatarMode:value=>avatarMode=value});
+  assert.deepEqual(errors,[]);await browser.close();return;
+ }
  if(process.env.COMPOSITOR_ONLY){await require('./compositor-motion.cjs')({page,context,root,book,chooseTab,shelfIdle,note,stableScreenshot});assert.deepEqual(errors,[]);await browser.close();return;}
  // Fixed-time screenshot sampling uses the main-thread animation clock; normal UI runs keep the compositor enabled.
  if(process.env.VISUAL_ONLY){await require('./visual-motion.cjs')({page,root,book,chooseTab,shelfIdle,note,stableScreenshot,setDetailDelay:value=>detailDelay=value});assert.deepEqual(errors,[]);await browser.close();return;}
@@ -368,7 +405,7 @@ function svg(label,seed=0){
  assert.equal(await act('toggleThemeRipple').count(),0);assert.equal(await page.getByText('主题圆形扩散',{exact:true}).count(),0);await act('quickTheme').click();await page.waitForSelector('body.dark');await page.waitForFunction(()=>!document.documentElement.classList.contains('theme-transitioning'));note('the redundant theme switch is removed while the circular theme reveal remains enabled');
  await openSettings('motion');await act('toggleShelfHaptics').click();assert.equal(await act('toggleShelfHaptics').getAttribute('aria-checked'),'false');await openSettings('motion');await act('toggleMotion').click();await chooseTab('shelf');await shelfIdle();assert.equal(await page.locator('#main-content').evaluate(el=>el.getAnimations().length),0);const offHaptics=await page.evaluate(()=>window.fixtureHaptics.length);await flick(1);await shelfIdle();assert.equal(await page.evaluate(()=>window.fixtureHaptics.length),offHaptics);note('disabled page animation creates no entry effect and disabled shelf haptics create no bridge calls');
  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.page-discover .bookcard').length===24);await chooseTab('settings');await openSettings('motion');assert.equal(await act('toggleMotion').getAttribute('aria-checked'),'false');assert.equal(await act('toggleShelfHaptics').getAttribute('aria-checked'),'false');assert.equal(await act('toggleThemeRipple').count(),0);note('motion and haptic choices survive restarting the interface without restoring the removed theme option');
- await chooseTab('settings');assert.equal(await page.locator('.feature-entry').count(),4);assert.equal(await page.locator('.settings-group').count(),0);await act('aboutApp').click();assert.match(await page.getByRole('dialog',{name:'关于拷贝漫画'}).innerText(),/1\.12\.1/);assert.match(await page.locator('.about-repository').innerText(),/JupiterLXV\/CopyReader/);await act('closeModal').click();note('settings presents four focused entries and an accessible About panel');
+ await chooseTab('settings');assert.equal(await page.locator('.feature-entry').count(),4);assert.equal(await page.locator('.settings-group').count(),0);await act('aboutApp').click();assert.match(await page.getByRole('dialog',{name:'关于拷贝漫画'}).innerText(),/1\.13\.0/);assert.match(await page.locator('.about-repository').innerText(),/JupiterLXV\/CopyReader/);await act('closeModal').click();note('settings presents four focused entries and an accessible About panel');
  await openSettings('motion');await act('toggleMotion').click();await page.emulateMedia({reducedMotion:'reduce'});await act('quickTheme').click();await sleep(30);assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('theme-transitioning')),false);assert.equal(await page.evaluate(()=>document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)')),false);note('system reduced-motion suppresses circular reveals and animated page entries');
  for(const width of [320,393,768]){await page.setViewportSize({width,height:width===320?740:width===393?852:1024});await noOverflow();await chooseTab('shelf');await shelfIdle();await page.evaluate(()=>window.scrollTo(0,0));const box=await page.evaluate(()=>({pager:document.querySelector('.gallery-pager').getBoundingClientRect().bottom,nav:document.querySelector('.nav').getBoundingClientRect().top}));assert.ok(box.pager<=box.nav-2,JSON.stringify({width,...box}));await chooseTab('settings');await noOverflow();await openSettings('network');await noOverflow();await page.evaluate(()=>window.AppBack());}note('the curved shelf, pager, settings groups and advanced controls fit narrow phones and tablets');
  await page.setViewportSize({width:393,height:852});await chooseTab('shelf');await shelfIdle();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(root,'checks/polished-shelf-light.png')});
