@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
     private static final String UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
     private static final String DEFAULT_API = "https://api.2024manga.com";
+    private static final String DEFAULT_CATALOG_API = "https://api.copy202602.com";
     private static final String DEFAULT_ACCOUNT_API = "https://api.copy202601.com";
     private static final int PICK_AVATAR = 103;
     private final ExecutorService io = Executors.newFixedThreadPool(4);
@@ -197,16 +198,32 @@ public final class MainActivity extends Activity {
                 for(int j=0;j<group.length();j++){String host=group.optString(j);if(host.matches("[a-zA-Z0-9.-]+"))discovered.add("https://"+host);}}
         } catch(Exception ignored) { /* The primary endpoint remains usable. */ }
     }
+    private JSONObject fetchPublicJson(String origin, String path) throws Exception {
+        String base = "https://" + new URL(origin).getHost();
+        if (DEFAULT_CATALOG_API.equalsIgnoreCase(base) || DEFAULT_ACCOUNT_API.equalsIgnoreCase(base)) {
+            return new AccountProtocol(origin).call(path, "GET", null, null);
+        }
+        return fetchJson(origin + path);
+    }
+    private JSONObject catalogApi(String path, boolean refresh) throws Exception {
+        String configured = prefs.getString("api", DEFAULT_API);
+        String base = "https://" + new URL(configured).getHost();
+        return api(path, refresh, DEFAULT_API.equalsIgnoreCase(base) ? DEFAULT_CATALOG_API : configured);
+    }
     private JSONObject api(String path, boolean refresh) throws Exception {
-        String chosen=prefs.getString("api",DEFAULT_API), key=hash(chosen+path);
+        return api(path, refresh, prefs.getString("api", DEFAULT_API));
+    }
+    private JSONObject api(String path, boolean refresh, String chosen) throws Exception {
+        String key=hash(chosen+path);
         File cache=new File(apiDir,key+".json");
         if(!refresh && cache.exists() && System.currentTimeMillis()-cache.lastModified()<120000) return new JSONObject(new String(readBytes(new FileInputStream(cache),8*1024*1024),StandardCharsets.UTF_8));
         LinkedHashSet<String> hosts=new LinkedHashSet<>(); hosts.add(chosen);
+        if(chosen.equals(DEFAULT_CATALOG_API)) hosts.add(DEFAULT_ACCOUNT_API);
         if(chosen.equals(DEFAULT_API)) {String last=prefs.getString("last_api","");if(!last.isEmpty())hosts.add(last);hosts.addAll(discovered);}
         Exception failure=null;int attempts=0;
         for(String host:hosts){ if(attempts++>=3)break;
             try {
-                JSONObject data=fetchJson(host+path);int code=data.optInt("code",0);
+                JSONObject data=fetchPublicJson(host,path);int code=data.optInt("code",0);
                 if(code!=200)throw new IOException(data.optString("message","数据源暂时不可用")+"（"+code+"）");
                 try { writeFile(cache,data.toString().getBytes(StandardCharsets.UTF_8)); } catch(IOException ignored) {}
                 if(chosen.equals(DEFAULT_API))prefs.edit().putString("last_api",host).apply();return data;
@@ -342,21 +359,21 @@ public final class MainActivity extends Activity {
             case "cloudRemove":long shelfId=a.optLong("shelfId",0);if(shelfId<=0)throw new IOException("未取得账号书架记录，请刷新后重试");return signed("/api/v3/member/collect/comics?platform=3","DELETE","ids="+shelfId);
             case "list":
                 String mode=a.optString("mode","latest"),theme=a.optString("theme","");
-                path="/api/v3/comics?limit=24&offset="+offset+"&ordering="+(mode.equals("popular")?"-popular":"-datetime_updated")+"&platform=3";
+                path="/api/v3/comics?limit=24&offset="+offset+"&ordering="+(mode.equals("popular")?"-popular":"-datetime_updated")+"&free_type=1&platform=3";
                 if (!theme.isEmpty()) path += "&theme=" + enc(word(a, "theme"));
                 if (!a.optString("author", "").isEmpty()) path += "&author=" + enc(word(a, "author"));
-                return api(path, a.optBoolean("refresh"));
+                return catalogApi(path, a.optBoolean("refresh"));
             case "search":
                 String searchType = a.optString("type").equals("author") ? "author" : "";
-                return api("/api/v3/search/comic?limit=24&offset=" + offset + "&q=" + enc(a.optString("q", ""))
-                        + "&q_type=" + searchType + "&platform=3", a.optBoolean("refresh"));
+                return catalogApi("/api/v3/search/comic?limit=24&offset=" + offset + "&q=" + enc(a.optString("q", ""))
+                        + "&q_type=" + searchType + "&free_type=1&platform=3", a.optBoolean("refresh"));
             case "themes":
                 try {
-                    JSONObject data = api("/api/v3/h5/filter/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
+                    JSONObject data = catalogApi("/api/v3/h5/filter/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
                     JSONObject result = data.optJSONObject("results");
                     if (result != null && (result.optJSONArray("theme") != null || result.optJSONArray("themes") != null)) return data;
                 } catch (Exception ignored) { /* Older lines use filterIndex. */ }
-                return api("/api/v3/h5/filterIndex/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
+                return catalogApi("/api/v3/h5/filterIndex/comic/tags?type=1&platform=3", a.optBoolean("refresh"));
             case "detail":return signedOrPublic("/api/v3/comic2/"+word(a,"comic")+"?platform=3",a.optBoolean("refresh"));
             case "chapters":return api("/api/v3/comic/"+word(a,"comic")+"/group/"+word(a,"group")+"/chapters?limit=100&offset="+offset+"&platform=3",a.optBoolean("refresh"));
             case "chapter":
@@ -365,7 +382,14 @@ public final class MainActivity extends Activity {
                 Object payload=original.opt("results");
                 if(!(payload instanceof JSONObject) || !((JSONObject)payload).has("chapter"))throw new IOException("当前章节数据格式暂不支持");
                 return original;
-            case "ping":String candidate=safeHttps(a.optString("base",prefs.getString("api",DEFAULT_API)).trim());URL target=new URL(candidate);if((!target.getPath().isEmpty()&&!target.getPath().equals("/"))||target.getQuery()!=null||target.getRef()!=null)throw new IOException("只填写 HTTPS 域名，不含路径");JSONObject ping=fetchJson(candidate.replaceAll("/$","")+"/api/v3/comics?limit=1&offset=0&platform=3");if(ping.optInt("code",200)!=200||ping.optJSONObject("results")==null||ping.getJSONObject("results").optJSONArray("list")==null)throw new IOException("此地址未返回有效的漫画数据");return ping;
+            case "ping":
+                String candidate = safeHttps(a.optString("base", prefs.getString("api", DEFAULT_API)).trim());
+                URL target = new URL(candidate);
+                if ((!target.getPath().isEmpty() && !target.getPath().equals("/")) || target.getQuery()!=null || target.getRef()!=null) throw new IOException("只填写 HTTPS 域名，不含路径");
+                JSONObject ping = fetchPublicJson(candidate.replaceAll("/$", ""), "/api/v3/comics?limit=1&offset=0&free_type=1&platform=3");
+                JSONObject results = ping.optJSONObject("results");
+                if (ping.optInt("code", 200) != 200 || results == null || results.optJSONArray("list") == null) throw new IOException("此地址未返回有效的漫画数据");
+                return ping;
             case "cache":JSONObject c=new JSONObject();long bytes=0;File[] fs=imageDir.listFiles();if(fs!=null)for(File f:fs)bytes+=f.length();return c.put("bytes",bytes);
             case "clearCache":for(File dir:new File[]{imageDir,apiDir}){File[] files=dir.listFiles();if(files!=null)for(File f:files)f.delete();}return new JSONObject();
             default:throw new IOException("不支持的操作");

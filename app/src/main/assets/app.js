@@ -104,6 +104,10 @@ function newListing(filters={}){
  return {mode:'latest',theme:'',author:'',query:'',searchType:'',items:[],offset:0,total:0,loading:false,error:'',generation:0,loaded:false,...filters};
 }
 const listing=newListing();
+function resetDiscovery(){
+ Object.assign(listing,newListing({mode:listing.mode,query:listing.query,generation:listing.generation+1}));
+ if(screen==='main'&&tab==='discover')loadList();
+}
 let catalog=null;
 let detail=null,reader=null,discussion=null,commentEditor=null,commentSending=false,shelfEditor=null;
 let profileEditor=null,profileReading=null,profileSaving=false;
@@ -590,15 +594,15 @@ function settingsSections(){
  const reading=settingsRow('界面主题','浅色、深色或跟随系统','theme',theme)+settingsRow('默认阅读方式','点击切换，立即保存','readerMode',state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读')+settingsRow('音量键翻页','仅在阅读时生效','volume','',state.prefs.volume);
  const motion=settingsRow('页面动画','斜切换页，内容按同一时钟展开','toggleMotion','',state.prefs.motionStyle!=='none')+`<div class="motion-guide"><span>斜切换页 · 编号与内容展开</span><button class="textbtn" ${action('previewMotion')}>预览</button><div class="motion-demo" id="motion-preview" aria-hidden="true"><span class="motion-demo-title">设置</span><span class="archive-code" aria-hidden="true">04 / SETTINGS</span><i></i><i></i><i></i></div></div><label class="settingrow settings-select" for="motion-speed"><span class="setting-copy"><strong>动画节奏</strong><span class="setting-description">统一调整进场、返回与内容展开</span></span><select id="motion-speed" ${state.prefs.motionStyle==='none'?'disabled':''}><option value="quick" ${state.prefs.motionSpeed==='quick'?'selected':''}>轻快</option><option value="standard" ${state.prefs.motionSpeed==='standard'?'selected':''}>标准</option><option value="calm" ${state.prefs.motionSpeed==='calm'?'selected':''}>舒展</option></select></label>`+settingsRow('逐页翻页动画','纸页展开，与页面共用缓动曲线','toggleReaderTurn','',state.prefs.readerTurn!=='none')+settingsRow('书架轻触反馈','滑过书脊时轻震，遵循系统设置','toggleShelfHaptics','',state.prefs.shelfHaptics)+`<p class="settings-hint" id="motion-hint">${reducedMotion.matches?'系统已开启减少动态效果，动画暂不播放。':state.prefs.motionStyle==='none'?'页面、标题与翻页动画均已关闭。':'跟随系统的“减少动态效果”设置。'}</p>`;
  const data=settingsRow('导出本地备份','书架、阅读记录和偏好','export','导出')+settingsRow('导入本地备份','合并书架与历史，恢复偏好','import','导入')+settingsRow('清理图片缓存','<span id="cache-size">上限约 120 MB</span>','clearCache','清理');
- const network=`<section class="panel"><div class="settings-field"><strong>账号登录线路</strong><p class="quiet">下次登录生效</p><label for="account-api-url" class="sr-only">HTTPS 账号接口域名</label><input id="account-api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getAccountApi():'https://api.copy202601.com')}"><select id="account-protocol" aria-label="账号登录协议"><option value="modern" ${!window.ReaderNative||ReaderNative.getAccountProtocol()==='modern'?'selected':''}>新版账号协议</option><option value="legacy" ${window.ReaderNative&&ReaderNative.getAccountProtocol()==='legacy'?'selected':''}>旧版兼容协议</option></select><div class="actions"><button class="btn small secondary" ${action('saveAccountApi')}>保存账号线路</button><button class="btn small outline" ${action('resetAccountApi')}>恢复新版默认</button></div><button class="textbtn rowgap" ${action('legacyAccountApi')}>使用旧版账号线路</button></div></section><section class="panel"><div class="settings-field"><strong>漫画数据线路</strong><p class="quiet">不影响已登录账号</p><label for="api-url" class="sr-only">HTTPS 数据接口域名</label><input id="api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getApi():'https://api.2024manga.com')}"><div class="actions"><button class="btn small secondary" ${action('saveApi')}>保存漫画线路</button><button class="btn small outline" ${action('testApi')}>测试漫画连接</button></div><button class="textbtn rowgap" ${action('resetApi')}>恢复默认漫画线路</button></div></section>`;
+ const network=`<section class="panel"><div class="settings-field"><strong>账号登录线路</strong><p class="quiet">下次登录生效</p><label for="account-api-url" class="sr-only">HTTPS 账号接口域名</label><input id="account-api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getAccountApi():'https://api.copy202601.com')}"><select id="account-protocol" aria-label="账号登录协议"><option value="modern" ${!window.ReaderNative||ReaderNative.getAccountProtocol()==='modern'?'selected':''}>新版账号协议</option><option value="legacy" ${window.ReaderNative&&ReaderNative.getAccountProtocol()==='legacy'?'selected':''}>旧版兼容协议</option></select><div class="actions"><button class="btn small secondary" ${action('saveAccountApi')}>保存账号线路</button><button class="btn small outline" ${action('resetAccountApi')}>恢复新版默认</button></div><button class="textbtn rowgap" ${action('legacyAccountApi')}>使用旧版账号线路</button></div></section><section class="panel"><div class="settings-field"><strong>漫画数据线路</strong><p class="quiet">默认题材和搜索使用新版目录。账号线路独立设置。</p><label for="api-url" class="sr-only">HTTPS 数据接口域名</label><input id="api-url" type="url" spellcheck="false" autocomplete="off" value="${esc(window.ReaderNative?ReaderNative.getApi():'https://api.2024manga.com')}"><div class="actions"><button class="btn small secondary" ${action('saveApi')}>保存漫画线路</button><button class="btn small outline" ${action('testApi')}>测试漫画连接</button></div><button class="textbtn rowgap" ${action('resetApi')}>恢复默认漫画线路</button></div></section>`;
  return {reading,motion,data,network};
 }
-function settingsContent(){return `<section id="settings-account" aria-label="账号资料">${accountCard()}</section><div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off" value="${esc(settingsSearchValue)}"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" ${settingsSearchValue?'':'hidden'}>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-entries">${Object.entries(settingsMeta).map(([id,m])=>`<button class="feature-entry archive-panel" ${action('settingsPage',attr('value',id))} data-settings-target="${id}"><span class="feature-entry-content">${icon(m.icon)}<span><strong>${m.title}</strong><small>${m.note}</small></span>${icon('next')}</span></button>`).join('')}</div><div class="settings-search-results" hidden></div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.13.0 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;}
+function settingsContent(){return `<section id="settings-account" aria-label="账号资料">${accountCard()}</section><div class="settings-search">${icon('search')}<input type="search" id="settings-search" placeholder="搜索设置" aria-label="搜索设置" autocomplete="off" value="${esc(settingsSearchValue)}"><button type="button" ${action('clearSettingsSearch')} aria-label="清除设置搜索" ${settingsSearchValue?'':'hidden'}>${icon('close')}</button></div><p id="settings-search-status" class="sr-only" role="status"></p><p id="settings-no-results" class="settings-no-results" hidden>没有找到相关设置</p><div class="settings-entries">${Object.entries(settingsMeta).map(([id,m])=>`<button class="feature-entry archive-panel" ${action('settingsPage',attr('value',id))} data-settings-target="${id}"><span class="feature-entry-content">${icon(m.icon)}<span><strong>${m.title}</strong><small>${m.note}</small></span>${icon('next')}</span></button>`).join('')}</div><div class="settings-search-results" hidden></div><section class="about-app"><div class="about-app-heading"><span class="about-app-mark">${icon('book')}</span><div><h2>拷贝漫画</h2><p>1.13.1 · 第三方客户端</p></div></div><button class="textbtn" ${action('aboutApp')}>关于该应用 ${icon('next')}</button></section>`;}
 function openSettingsSection(id){if(!settingsMeta[id]||screen!=='main'||tab!=='settings')return;settingsSearchValue=$('#settings-search')?.value||'';settingsHomeScroll=window.scrollY;document.activeElement?.blur();settingsSection=id;screen='settings';route++;viewReturning=false;viewDirection=1;render();window.scrollTo(0,0);}
 function renderSettingsDetail(){const id=settingsSection,m=settingsMeta[id];if(!m)return;app.innerHTML=`<div class="shell page-settings-sub" data-settings-section="${id}"><header class="settings-subhead"><button class="iconbtn" ${action('back')} aria-label="返回设置">${icon('arrow')}</button><div class="archive-route-title"><h1>${m.title}</h1><span class="archive-code" aria-hidden="true">${m.code}</span></div><button class="iconbtn" ${action('quickTheme')} aria-label="切换深浅色">${icon(dark()?'sun':'moon')}</button></header><div id="main-content"><div class="archive-section" aria-hidden="true"><span class="archive-code">${m.code}</span><span class="archive-rule"></span><i></i></div>${settingsGroup(id,settingsSections()[id])}</div></div>`;AppMotion.bindBackGesture(app.firstElementChild,back);if(id==='data')request('cache').then(x=>{const el=$('#cache-size');if(el)el.textContent=`当前约 ${(x.bytes/1024/1024).toFixed(1)} MB · 上限约 120 MB`;}).catch(()=>{});}
 function closeSettingsSection(){if(screen!=='settings')return;const id=settingsSection;screen='main';tab='settings';settingsSection='';viewReturning=true;viewDirection=-1;route++;render();window.scrollTo(0,settingsHomeScroll);$(`[data-settings-target="${id}"]`)?.focus({preventScroll:true});}
 
-function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.13.0</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
+function showAbout(){modal('关于拷贝漫画',`<div class="about-dialog-heading"><span class="about-app-mark">${icon('book')}</span><div><h3>拷贝漫画</h3><p>版本 1.13.1</p></div></div><dl class="about-facts"><div><dt>应用</dt><dd>第三方 Android 漫画阅读客户端</dd></div><div><dt>功能</dt><dd>在线阅读、账号书架、自选书架与本地阅读记录</dd></div><div><dt>许可</dt><dd>MIT 开源许可</dd></div><div><dt>界面参考</dt><dd>Wenku8_Flutter</dd></div></dl><p class="about-repository">https://github.com/JupiterLXV/CopyReader</p>`);}
 function findBook(word){return catalog?.list.items.find(b=>b.path_word===word)||listing.items.find(b=>b.path_word===word)||cloud.items.find(b=>b.path_word===word)||state.favorites[word]||state.showcase.find(b=>b.path_word===word)||state.history.find(h=>h.book.path_word===word)?.book||detail?.book;}
 function historyFor(word){return state.history.find(h=>h.book.path_word===word);}
 async function openBook(word,options={}){
@@ -950,50 +954,46 @@ function closeModal(){
 function modal(title,body){$$('.modal-exit').forEach(n=>n.remove());if(!modalRoot.children.length)modalFocus=document.activeElement;modalClosing=null;if(gallery){cancelGalleryGesture();stopGallery(gallery);gallery.position=Math.round(gallery.position);paintGallery(gallery);}modalRoot.innerHTML=`<div class="modalshade" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modalhandle"></div><div class="sectionhead"><h2>${esc(title)}</h2><button class="textbtn" ${action('closeModal')} aria-label="关闭">${icon('close')}</button></div>${body}</section></div>`;document.body.style.overflow='hidden';$('.modal button')?.focus();AppMotion.sheet($('.modal'));}
 let confirmAction=null;
 function confirmModal(title,message,fn,label='确认'){confirmAction=fn;modal(title,`<p>${esc(message)}</p><div class="actions"><button class="btn outline" ${action('closeModal')}>取消</button><button class="btn" ${action('confirm')}>${esc(label)}</button></div>`);}
-// Public catalogue snapshot. A successful source refresh also adds newly introduced topics.
-let categories=[
- ['', '全部题材'],
- ['aiqing','愛情'],['huanlexiang','歡樂向'],['maoxian','冒險'],['qihuan','奇幻'],['baihe','百合'],
- ['xiaoyuan','校园'],['kehuan','科幻'],['dongfang','東方'],['danmei','耽美'],['gedou','格鬥'],
- ['teenslove','TL'],['shenghuo','生活'],['qingxiaoshuo','轻小说'],['qita','其他'],['xuanyi','悬疑'],
- ['mengxi','萌系'],['shengui','神鬼'],['zhichang','职场'],['zhiyu','治愈'],['jiecao','节操'],
- ['sige','四格'],['gaoxiao','搞笑'],['changtiao','長條'],['jingji','竞技'],['mohuan','魔幻'],
- ['jianniang','舰娘'],['weiniang','伪娘'],['rexue','热血'],['jingsong','惊悚'],['meishi','美食'],
- ['xingzhuanhuan','性转换'],['lizhi','励志'],['yinyuewudao','音乐舞蹈'],['hougong','後宮'],['zhentan','侦探'],
- ['COLOR','彩色'],['aa','AA'],['yishijie','异世界'],['lishi','历史'],['chuanyue','穿越'],
- ['jizhan','机战'],['zhanzheng','战争'],['dushi','都市'],['chongsheng','重生'],['comiket102','C102'],
- ['kongbu','恐怖'],['shengcun','生存'],['comiket103','C103'],['comiket104','C104'],['comiket100','C100'],
- ['wuxia','武侠'],['comiket101','C101'],['comiket99','C99'],['comiket97','C97'],['comiket105','C105'],
- ['zhaixi','宅系'],['comiket96','C96'],['comiket106','C106'],['comiket107','C107'],['C98','C98'],
- ['comiket95','C95'],['zhuansheng','转生'],['comiket108','C108'],['fate','FATE'],['Uncensored','無修正'],
- ['xianxia','仙侠'],['loveLive','LoveLive'],['zazhifuzengxiezhenji','雜誌附贈寫真集'],['xuanhuan','玄幻'],['yineng','異能'],
- ['youxi','遊戲'],['zhenren','真人']
-].map(([id,name])=>({id,name}));
+const allCategory={id:'',name:'全部题材'};
+let categories=[allCategory];
 let categoriesLoaded=false,categoriesPending=null;
 function categoryName(word){return categories.find(term=>term.id===word)?.name||word;}
 function paintCategories(){
  const panel=$('#category-options');if(!panel)return;
  const query=$('#category-search').value.trim().toLowerCase();
  const terms=categories.filter(({id,name})=>name.toLowerCase().includes(query)||id.toLowerCase().includes(query));
- panel.innerHTML=terms.map(({id,name})=>`<button type="button" class="chip ${listing.theme===id?'active':''}" ${action('category',attr('theme',id))} aria-pressed="${listing.theme===id}">${esc(name)}</button>`).join('')||'<p class="quiet">没有匹配的题材</p>';
+ const status=!categoriesLoaded?(categoriesPending?'正在加载题材…':'题材目录暂不可用，请刷新重试'):terms.length?'':'没有匹配的题材';
+ panel.innerHTML=terms.map(({id,name})=>`<button type="button" class="chip ${listing.theme===id?'active':''}" ${action('category',attr('theme',id))} aria-pressed="${listing.theme===id}">${esc(name)}</button>`).join('')+(status?`<p class="quiet" role="status">${status}</p>`:'');
  refreshBusy('refreshCategories',!!categoriesPending);
 }
 async function refreshCategories(force=false){
  if(categoriesPending||categoriesLoaded&&!force)return;
  const task=request('themes',{refresh:force},{silent:true});categoriesPending=task;paintCategories();
  try{
-  const result=(await task).results;
-  const items=namedTerms(result?.theme||result?.themes).filter(term=>term.id);
-  if(!items.length)throw Error('源站未返回题材');
-  const merged=new Map(categories.map(term=>[term.id,term]));
-  for(const term of items)merged.set(term.id,term);
-  categories=[...merged.values()];categoriesLoaded=true;
- }catch(e){if(force)toast('暂时无法更新题材，仍可使用已有目录');}
- finally{categoriesPending=null;paintCategories();}
+  const response=await task;
+  if(categoriesPending!==task)return;
+  const result=response.results,tags=Array.isArray(result?.theme)?result.theme:result?.themes;
+  if(!Array.isArray(tags))throw Error('源站未返回题材');
+  categories=[allCategory,...namedTerms(tags).filter(term=>term.id)];categoriesLoaded=true;
+  if(listing.theme&&!categories.some(term=>term.id===listing.theme))resetDiscovery();
+  if(force&&response._stale)toast('网络暂不可用，正在显示上次的题材');
+ }catch(e){if(force&&categoriesPending===task)toast('暂时无法更新题材，请稍后重试');}
+ finally{if(categoriesPending===task){categoriesPending=null;paintCategories();}}
 }
 function openCategories(){
  modal('题材',`<div class="category-tools"><input class="login-input" id="category-search" type="search" placeholder="搜索题材" aria-label="搜索题材">${refreshButton('refreshCategories','更新题材目录')}</div><div id="category-options" class="chips category-options" aria-label="题材列表"></div>`);
  paintCategories();refreshCategories();
+}
+function saveMangaApi(value,notice){
+ if(!window.ReaderNative){toast('请在 Android 应用中设置');return;}
+ const previous=ReaderNative.getApi(),error=ReaderNative.setApi(value);
+ if(error){toast(error);return;}
+ const saved=ReaderNative.getApi();$('#api-url').value=saved;
+ if(previous!==saved){
+  categories=[allCategory];categoriesLoaded=false;categoriesPending=null;
+  resetDiscovery();
+ }
+ toast(notice);
 }
 function showTheme(){modal('界面主题',`<div class="theme-choices">${[['system','跟随系统'],['light','浅色'],['dark','深色']].map(([id,label])=>`<button class="theme-choice ${state.prefs.theme===id?'selected':''}" ${action('setTheme',attr('value',id))} aria-pressed="${state.prefs.theme===id}"><span class="theme-swatch ${id}" aria-hidden="true"></span>${label}</button>`).join('')}</div>`);}
 function toggleMode(){persistReading();if(!setPreference('mode',state.prefs.mode==='vertical'?'paged':'vertical'))return;if(screen==='reader'){AppMotion.cancelTurn();renderReader();}else{const value=$('[data-act="readerMode"] .setting-value');if(value)value.textContent=state.prefs.mode==='vertical'?'竖向滚动':'逐页阅读';}}
@@ -1140,8 +1140,8 @@ document.addEventListener('click',async e=>{
  case 'export':if(window.ReaderNative)ReaderNative.exportData(JSON.stringify(state,null,2));else toast('请在 Android 应用中导出备份');break;
  case 'import':if(window.ReaderNative)ReaderNative.importData();else toast('请在 Android 应用中导入备份');break;
  case 'clearCache':b.disabled=true;try{await request('clearCache');toast('图片缓存已清理');if($('#cache-size'))$('#cache-size').textContent='当前约 0 MB · 上限约 120 MB';}catch(e){toast(e.message);}finally{b.disabled=false;}break;
- case 'saveApi':{const error=window.ReaderNative?ReaderNative.setApi($('#api-url').value):'请在 Android 应用中设置';toast(error||'线路已保存，可返回发现页刷新');}break;
- case 'resetApi':if(window.ReaderNative){ReaderNative.setApi('https://api.2024manga.com');$('#api-url').value=ReaderNative.getApi();toast('已恢复默认线路');}break;
+ case 'saveApi':saveMangaApi($('#api-url').value,'线路已保存');break;
+ case 'resetApi':saveMangaApi('https://api.2024manga.com','已恢复默认线路');break;
  case 'testApi':{b.disabled=true;const old=b.textContent;b.textContent='连接中…';try{const address=$('#api-url').value.trim();await request('ping',{base:address});toast('此线路连接正常，点击保存后生效');}catch(e){toast(e.message);}finally{b.disabled=false;b.textContent=old;}}break;
  }
 });

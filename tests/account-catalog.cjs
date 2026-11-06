@@ -11,13 +11,16 @@ module.exports = async ({page, root, act, calls, note, chooseTab, noOverflow, av
   await cards(24);
   await act('categories').click();
   await page.getByRole('button', {name:'新测试题材', exact:true}).waitFor();
-  assert.ok(await page.locator('#category-options button').count() >= 73);
+  assert.deepEqual(await page.locator('#category-options button').allTextContents(), ['全部题材','节操','新测试题材']);
+  await act('refreshCategories').click();
+  await page.getByRole('button', {name:'刷新后的题材', exact:true}).waitFor();
+  assert.deepEqual(await page.locator('#category-options button').allTextContents(), ['全部题材','节操','刷新后的题材']);
   await page.locator('#category-search').fill('节操');
   assert.equal(await page.locator('#category-options button').count(), 1);
   await page.getByRole('button', {name:'节操', exact:true}).click();
   await page.getByRole('button', {name:/题材与作者测试作品/}).waitFor();
   assert.equal(last('list').theme, 'jiecao');
-  note('topic picker retains the complete local catalogue, adds server topics and filters by their identifiers');
+  note('topic picker uses the current source catalogue, removes obsolete topics on refresh and filters by identifier');
 
   await act('book').first().click();
   await page.waitForSelector('[data-act="openTag"][data-id="jiecao"]');
